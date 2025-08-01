@@ -35,10 +35,34 @@ This is a Streamlit prototype app that helps students practice critical thinking
      OPENAI_API_KEY = "your_key_here"
      ```
 
+
 4. Run the app:
    ```
    streamlit run school.py
    ```
+
+## Alternative: Use Without Code
+
+You can test this idea without running any code by pasting the following prompt into ChatGPT or another LLM:
+
+```
+You're simulating a learning assistant for critical thinking.
+
+Step 1: Generate a short educational statement that contains a **subtle factual error**, appropriate for an 8th-grade student. Choose a subject like U.S. history, science, or geography.
+
+Step 2: Present the statement and ask the student:  
+"What do you think is wrong with this statement? Explain your reasoning."
+
+Step 3: Wait for a student response.
+
+Step 4: Based on the response, **evaluate** whether the student correctly identified the error. Give:
+- A score out of 2 (0 = wrong, 1 = partially correct, 2 = fully correct)
+- A short explanation of the evaluation
+
+Then offer a new question if prompted.
+
+Begin with Step 1 now.
+```
 
 ## Requirements
 
