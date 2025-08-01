@@ -5,6 +5,9 @@
 
 This is a Streamlit prototype app that helps students practice critical thinking by identifying factual errors in short educational statements.
 
+This prototype is hopefully the first step toward building a truly generative AI-powered school. It explores how language models can generate instructional content, prompt student analysis, and assess responses — automating core teaching loops like question generation, student engagement, and formative feedback. This foundation supports scalable, personalized learning systems.
+
+
 ## How It Works
 
 1. The app generates a short statement with a subtle error.
