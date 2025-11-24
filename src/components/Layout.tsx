@@ -36,12 +36,13 @@ export function Layout({ children }: LayoutProps) {
                             <Settings className="w-4 h-4 mr-2" />
                             Settings
                         </Button>
-                        <LogViewer />
                     </div>
                 </header>
                 <main className="flex-1 container mx-auto p-4 md:p-8 max-w-7xl">
                     {children}
                 </main>
+                {/* LogViewer with fixed positioning - render outside header */}
+                <LogViewer />
             </div>
         </div>
     );

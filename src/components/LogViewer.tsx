@@ -7,6 +7,9 @@ import { FileText } from "lucide-react";
 export function LogViewer() {
     const logs = useAppStore((state) => state.logs);
 
+    // Sort logs newest to oldest
+    const sortedLogs = [...logs].reverse();
+
     return (
         <Sheet>
             <SheetTrigger asChild>
@@ -20,7 +23,7 @@ export function LogViewer() {
                 </SheetHeader>
                 <ScrollArea className="h-[calc(100vh-100px)] mt-4 pr-4">
                     <div className="space-y-4">
-                        {logs.map((log) => (
+                        {sortedLogs.map((log) => (
                             <div key={log.id} className="p-4 rounded-lg border bg-muted/50">
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="font-semibold text-sm">{log.action}</span>

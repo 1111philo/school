@@ -57,8 +57,9 @@ export class GenAIService {
         IMPORTANT: Return ONLY the JSON object. Do not wrap it in markdown code blocks.
         `;
 
+        // Use smaller model for simple conversation
         const result = await this.genAI.models.generateContent({
-            model: "gemini-2.0-flash-exp",
+            model: "gemini-1.5-flash",
             contents: prompt
         });
 
@@ -359,8 +360,9 @@ export class GenAIService {
         CRITICAL: Return ONLY valid JSON. No markdown code blocks.
         `;
 
+        // Use smaller model for remedial activities
         const result = await this.genAI.models.generateContent({
-            model: "gemini-2.0-flash-exp",
+            model: "gemini-1.5-flash",
             contents: prompt
         });
 
@@ -413,8 +415,9 @@ export class GenAIService {
                 ];
             }
 
+            // Use smaller model for assessment
             const result = await this.genAI.models.generateContent({
-                model: "gemini-2.0-flash-exp",
+                model: "gemini-1.5-flash",
                 contents: [{ role: "user", parts }],
                 config: { responseMimeType: "application/json" }
             });

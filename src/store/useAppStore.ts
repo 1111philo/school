@@ -367,7 +367,8 @@ export const useAppStore = create<AppStore>()(
 
                     const completedCount = updatedLessons.filter(l => l.isCompleted).length;
                     const totalLessons = state.currentCourse.roadmap.length;
-                    const progress = (completedCount / totalLessons) * 100;
+                    // Cap progress at 100% to prevent exceeding 100%
+                    const progress = Math.min(100, (completedCount / totalLessons) * 100);
 
                     const updatedCourse = { ...state.currentCourse, lessons: updatedLessons };
 
@@ -420,7 +421,12 @@ export const useAppStore = create<AppStore>()(
             name: '1111-school-storage',
             partialize: (state) => ({
                 settings: state.settings,
-                savedCourses: state.savedCourses
+                // Only store essential course data, exclude logs and chat history to save space
+                savedCourses: state.savedCourses.map(course => ({
+                    ...course,
+                    // Limit chat history to last 10 messages to save space
+                    chatHistory: course.chatHistory?.slice(-10) || []
+                }))
             })
         }
     )

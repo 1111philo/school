@@ -178,8 +178,7 @@ export function CourseView() {
                                     {!activeLesson.isCompleted && !showActivityResult && activeLesson.activity && (
                                         <div className="mt-8 pt-6 border-t border-border/40">
                                             <h3 className="text-lg font-semibold mb-4">
-                                                Interactive Activity
-                                                {activeLesson.attempts && activeLesson.attempts > 0 && (
+                                                Interactive Activity{activeLesson.attempts && activeLesson.attempts > 0 && (
                                                     <span className="text-sm text-muted-foreground ml-2">
                                                         (Attempt {activeLesson.attempts + 1})
                                                     </span>
