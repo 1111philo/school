@@ -2,6 +2,15 @@
 
 Technical documentation for the AI-powered personalized learning platform.
 
+## Vision & Strategy
+
+This demo is evolving toward the [Curriculum Individualizer Product Vision](https://docs.google.com/document/d/1Y1TeJMVMaHSw2mUpDA_eBa647vLyk97B3IUCGIQcjcc/edit?tab=t.0#heading=h.yjpzq5z0qjrp)—an agentic system that generates standards-aligned, individualized learning experiences for every student.
+
+**External References:**
+- [Curriculum Individualizer Vision](https://docs.google.com/document/d/1Y1TeJMVMaHSw2mUpDA_eBa647vLyk97B3IUCGIQcjcc/edit?tab=t.0#heading=h.yjpzq5z0qjrp) - Full product specification
+- [Student Archetypes](https://docs.google.com/spreadsheets/d/1XnRspdFq-qtGOUynWqZdvv6GjOgAEYSlwAwJZdZeXTA/edit?gid=0#gid=0) - Real student profiles for validation
+- [Glass Box AI Philosophy](https://dylanisa.ac/definitions/glass-box/) - Transparency principles for AI reasoning
+
 ## Architecture Overview
 
 ```
@@ -48,6 +57,15 @@ Technical documentation for the AI-powered personalized learning platform.
 ```
 
 ## Documentation Index
+
+### Strategy & Vision
+
+| Document | Description |
+|----------|-------------|
+| [Evolution Roadmap](./evolution-roadmap.md) | Path from demo → Curriculum Individualizer, individual-first approach |
+| [Pedagogical Framework](./pedagogical-framework.md) | UDL + Student Archetypes + Glass Box reasoning—the "how" of individualization |
+
+### Technical Implementation
 
 | Document | Description |
 |----------|-------------|

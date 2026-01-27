@@ -2,7 +2,27 @@
 
 This document outlines the strategic path from the current 1111 School demo application to the full [Curriculum Individualizer Product Vision](https://docs.google.com/document/d/1Y1TeJMVMaHSw2mUpDA_eBa647vLyk97B3IUCGIQcjcc/edit?tab=t.0#heading=h.yjpzq5z0qjrp).
 
+**Reference Documents:**
+- [Curriculum Individualizer Product Vision](https://docs.google.com/document/d/1Y1TeJMVMaHSw2mUpDA_eBa647vLyk97B3IUCGIQcjcc/edit?tab=t.0#heading=h.yjpzq5z0qjrp) - Full product specification
+- [Student Archetypes Data](https://docs.google.com/spreadsheets/d/1XnRspdFq-qtGOUynWqZdvv6GjOgAEYSlwAwJZdZeXTA/edit?gid=0#gid=0) - Real student profiles for validation
+- [Glass Box AI Philosophy](https://dylanisa.ac/definitions/glass-box/) - Transparency principles for AI reasoning
+- [Pedagogical Framework](./pedagogical-framework.md) - UDL + Archetypes + Glass Box deep dive
+
+---
+
+## Core Philosophy
+
 **Core Insight**: Rather than jumping to multi-tenant classrooms, we build the individualization engine first for a single learner. This validates the pedagogical approach before adding organizational complexity.
+
+### The Three Pillars
+
+| Pillar | Role | Document |
+|--------|------|----------|
+| **Universal Design for Learning (UDL)** | The framework—what levers exist for differentiation | [Pedagogical Framework](./pedagogical-framework.md#layer-1-universal-design-for-learning-udl) |
+| **Student Archetypes** | The lens—who we're designing for, how we measure differentiation | [Pedagogical Framework](./pedagogical-framework.md#layer-2-student-archetypes) |
+| **Glass Box Reasoning** | The transparency mechanism—visible, auditable AI decision-making | [Pedagogical Framework](./pedagogical-framework.md#layer-3-glass-box-reasoning) |
+
+**Key Thesis**: Advanced LLMs can reason through rich qualitative context about learners (not just rules like "IF reading_level < 6 THEN simplify") and produce meaningfully differentiated content. Glass Box principles make this reasoning trustworthy and improvable.
 
 ---
 
@@ -86,30 +106,69 @@ Phase 4: "Real teachers, real students"
 
 ---
 
-## Phase 1: Self-Aware Learner
+## Phase 1: Self-Aware Learner + Archetype Foundation
 
-**Goal**: The system knows WHO is learning and adapts accordingly.
+**Goal**: The system knows WHO is learning, classifies them into an archetype, and adapts accordingly with visible reasoning.
+
+> **Deep Dive**: See [Pedagogical Framework](./pedagogical-framework.md) for complete archetype profiles, UDL mapping, and Glass Box reasoning trace templates.
+
+### The Need × Ambition Matrix
+
+Students are characterized along two primary axes derived from [real student data](https://docs.google.com/spreadsheets/d/1XnRspdFq-qtGOUynWqZdvv6GjOgAEYSlwAwJZdZeXTA/edit?gid=0#gid=0):
+
+```
+                            AMBITION
+                 Low                      High
+              ┌────────────────────────────────────┐
+         Low  │  Glinda                 │  Ross    │
+              │  (Coasting)             │  Joseph  │
+              │  • Needs relevance      │(Thriving)│
+    NEED      │    hook                 │  • Ready │
+              │                         │   for    │
+              │                         │   depth  │
+              ├────────────────────────────────────┤
+              │  Gerryana    │  Rial    │  Wilmay  │
+         High │  (At Risk)   │  Rick    │(Striving)│
+              │  • Heavy     │(Emerging)│  • High  │
+              │    scaffolding          │   support│
+              │  • Confidence│  • Needs │   + high │
+              │    building  │  belonging│  challenge
+              └────────────────────────────────────┘
+```
 
 ### New Data Model
 
 ```typescript
-// Learner profile - the user describes themselves
+// Learner profile - combines archetype classification with individual context
 interface LearnerProfile {
   id: string;
 
-  // Reading & comprehension
-  readingLevel: 'early-elementary' | 'elementary' | 'middle' | 'high' | 'advanced';
-  vocabularyComfort: 'simple' | 'moderate' | 'advanced';
+  // Archetype classification (primary differentiation axes)
+  archetype: {
+    need: 'very-low' | 'low' | 'medium' | 'high' | 'very-high';
+    ambition: 'very-low' | 'low' | 'medium' | 'high' | 'very-high';
+  };
 
-  // Learning preferences (UDL: multiple means of engagement)
-  learningStyle: ('visual' | 'auditory' | 'reading' | 'kinesthetic')[];
-  preferredPacing: 'slow-deliberate' | 'moderate' | 'fast-challenging';
+  // Quantitative factors
+  age: number;
+  gradeLevel: string;
+  englishFluency: 'emerging' | 'proficient-1' | 'proficient-2' | 'fluent';
+  nativeLanguages: string[];
+  physicalDisabilities: string[];
+  mentalDisabilities: string[];
+  neurodiversity: string | null;
 
-  // Background (for relevant examples)
+  // Qualitative factors (for relevant examples, engagement hooks)
   interests: string[];
-  priorKnowledge: string[];  // What they already know about the subject
+  familyStatus: string;
+  socioeconomicStatus: string;
 
-  // Accessibility (UDL: multiple means of representation)
+  // The rich qualitative notes - "Lagniappe"
+  // e.g., "Will step back because she doesn't think she fits in this space"
+  // e.g., "considering the environmental impact of generative AI..."
+  lagniappe: string | null;
+
+  // UDL: Accessibility accommodations
   accommodations: {
     largeText?: boolean;
     highContrast?: boolean;
@@ -118,7 +177,7 @@ interface LearnerProfile {
     extendedTime?: boolean;
   };
 
-  // Expression preferences (UDL: multiple means of action/expression)
+  // UDL: Expression preferences
   preferredActivityTypes: ('multiple-choice' | 'short-response' | 'drawing' | 'verbal' | 'matching')[];
 }
 ```
@@ -171,71 +230,110 @@ generateIndividualizedLesson(
 // Returns: Content adapted to learner's reading level, style, interests
 ```
 
-### Individualization Dimensions
+### UDL-Based Individualization
 
-Based on Tomlinson's framework, each lesson adapts across four dimensions:
+Each lesson adapts across UDL's three principles, guided by archetype:
 
-| Dimension | What Changes | Example |
-|-----------|--------------|---------|
-| **Content** | Vocabulary, complexity, examples | A sports fan gets physics explained through basketball mechanics |
-| **Process** | Pacing, scaffolding, activities | A visual learner gets more diagrams, fewer walls of text |
-| **Product** | How mastery is demonstrated | A kinesthetic learner draws/builds; a verbal learner explains |
-| **Environment** | Presentation, accessibility | High contrast mode, larger text, reduced animations |
+| Archetype Pattern | Engagement Priority | Representation Priority | Expression Priority |
+|-------------------|---------------------|------------------------|---------------------|
+| High Need / Low Ambition | **Critical**: Hook through interests | Heavy scaffolding | Low-stakes formats |
+| High Need / High Ambition | Channel ambition, show pathways | Scaffold without patronizing | Multiple options |
+| Low Need / High Ambition | Autonomy, depth, challenge | Can handle complexity | Open-ended, creative |
+| Very High Need / Medium Ambition | Belonging, "you fit here" | Gentle entry, build up | Safe to fail |
+
+### Glass Box Reasoning Traces
+
+Every differentiated lesson includes a reasoning trace (see [full template](./pedagogical-framework.md#differentiation-reasoning-trace-template)):
+
+```markdown
+## Differentiation Reasoning Trace (Example: Rial)
+
+### Student Context Understanding
+- **Archetype**: Very High Need / Medium Ambition
+- **Key factors**: Raised by grandparents, Very Low SES
+- **Lagniappe**: "Will step back because she doesn't think she fits in this space"
+- **Confidence**: High
+
+### UDL Analysis
+**Engagement**: Challenge = low sense of belonging → Strategy = emphasize diverse voices in tech
+**Representation**: No learning disabilities indicated → Standard scaffolding, concrete-to-abstract
+**Expression**: Risk of disengagement if asked to perform → Offer private reflection first
+
+### Quantitative Metrics
+| Metric | Base | Individualized | Delta |
+|--------|------|----------------|-------|
+| Word count | 847 | 712 | -135 |
+| Images | 2 | 4 | +2 |
+| Scaffolding questions | 3 | 6 | +3 |
+
+### Teacher Review Points
+- [ ] Is belonging framing appropriate for Rial specifically?
+- [ ] Should we push more challenge given Medium Ambition?
+```
 
 ### Prompt Engineering for Individualization
 
 ```markdown
-# Lesson Generation Prompt (with learner profile)
+# Lesson Differentiation Task
 
-You are creating a lesson for a specific learner with these characteristics:
+You are an expert educator applying Universal Design for Learning (UDL) principles
+to differentiate a lesson for a specific student.
 
-## Learner Profile
-- Reading level: {{learnerProfile.readingLevel}}
-- Learning styles: {{learnerProfile.learningStyle}}
-- Interests: {{learnerProfile.interests}}
-- Prior knowledge: {{learnerProfile.priorKnowledge}}
-- Pacing preference: {{learnerProfile.preferredPacing}}
+## Your Framework (UDL)
+1. **Engagement** (the "why") - How will you recruit and sustain this learner's interest?
+2. **Representation** (the "what") - How will you present information accessibly?
+3. **Action/Expression** (the "how") - How will they demonstrate understanding?
 
-## Adaptation Requirements
+## Glass Box Requirement
+You MUST show your reasoning. For every adaptation, explain:
+- What challenge you identified
+- What strategy you chose
+- What alternatives you considered
+- Your confidence level (high/medium/low)
 
-### Content Adaptations
-- Vocabulary: Use {{vocabularyLevel}} language
-- Examples: Draw from learner's interests ({{interests}})
-- Complexity: {{complexityGuidance}}
+## Student Profile
+{{studentProfile as YAML}}
 
-### Process Adaptations
-- Include {{primaryLearningStyle}} elements prominently
-- Pacing: {{pacingGuidance}}
-- Scaffolding: {{scaffoldingLevel}}
+## Lagniappe (Important Qualitative Context)
+{{lagniappe or "No additional notes provided"}}
 
-### Product Adaptations
-- Primary activity type: {{preferredActivityTypes[0]}}
-- Alternative demonstration options: {{preferredActivityTypes.slice(1)}}
+## Base Lesson
+{{baseLesson}}
 
-### Environment Adaptations
-- {{accessibilityRequirements}}
-
-## Lesson Objective
-{{lessonObjective}}
-
-Generate a lesson that feels personally crafted for this learner.
+## Output Format
+1. Individualized lesson content
+2. Complete reasoning trace (see template)
+3. Quantitative metrics comparison
+4. Teacher review points for medium/low confidence decisions
 ```
 
 ### Implementation Tasks
 
-1. **Add LearnerProfile to types.ts**
-2. **Create ProfileSetupView component** - Onboarding wizard
+1. **Add LearnerProfile to types.ts** - Include archetype classification and lagniappe field
+2. **Create ProfileSetupView component** - Onboarding wizard capturing Need/Ambition + qualitative context
 3. **Extend useAppStore** - Add `learnerProfile` to persisted state
-4. **Refactor GenAIService** - Inject learner profile into all generation prompts
-5. **Update lesson rendering** - Apply accessibility preferences (text size, contrast, motion)
+4. **Refactor GenAIService** - New `differentiateLesson()` method with Glass Box output
+5. **Create ReasoningTraceView component** - Display the LLM's differentiation reasoning
+6. **Update lesson rendering** - Apply accessibility preferences (text size, contrast, motion)
+7. **Add quantitative metrics extraction** - Word count, reading level, image count, etc.
 
 ### Success Criteria
 
-- [ ] User can create and edit their learner profile
-- [ ] Generated lessons demonstrably differ based on profile settings
-- [ ] A "visual learner" profile produces more diagrams
-- [ ] A "sports interests" profile gets sports-related examples
+- [ ] User can create and edit their learner profile with archetype classification
+- [ ] Generated lessons demonstrably differ based on archetype quadrant
+- [ ] Lagniappe (qualitative notes) demonstrably influences output
+- [ ] Every differentiated lesson includes a reasoning trace
+- [ ] Reasoning traces show confidence levels and alternatives considered
+- [ ] Quantitative metrics are captured and displayed
 - [ ] Accessibility preferences are applied to UI
+
+### Experimental Validation
+
+To prove the system works, run these comparisons:
+
+1. **Same lesson, different archetypes** - Generate for High Need/Low Ambition vs Low Need/High Ambition. Outputs should measurably differ.
+2. **Same archetype, with/without Lagniappe** - Does "Will step back because she doesn't fit" change the output beyond what quantitative data predicts?
+3. **Reasoning coherence** - Do the stated rationales match the actual changes made?
 
 ---
 
@@ -700,17 +798,22 @@ This means we can validate the entire pedagogical approach—UDL compliance, Tom
 
 ## Recommended Starting Point
 
-**Phase 1: Self-Aware Learner** is the highest-leverage next step because:
+**Phase 1: Self-Aware Learner + Archetype Foundation** is the highest-leverage next step because:
 
-1. It's the smallest change that proves the core value proposition
+1. It validates the core thesis: LLMs can reason through qualitative context to differentiate
 2. It requires no architectural changes (just new types + prompt engineering)
-3. It creates a tangible "before/after" comparison for stakeholders
-4. Everything else builds on having a learner profile
+3. It creates tangible "before/after" comparisons using real [student archetypes](https://docs.google.com/spreadsheets/d/1XnRspdFq-qtGOUynWqZdvv6GjOgAEYSlwAwJZdZeXTA/edit?gid=0#gid=0)
+4. [Glass Box](https://dylanisa.ac/definitions/glass-box/) reasoning makes the system trustworthy from day one
+5. Everything else builds on having learner profiles and visible reasoning
 
 **First implementation tasks:**
-1. Add `LearnerProfile` type
-2. Create profile setup wizard (5-6 questions)
-3. Inject profile into lesson generation prompts
-4. Show how the same lesson differs for different profile settings
+1. Add `LearnerProfile` type with archetype classification and lagniappe
+2. Create profile setup wizard capturing Need × Ambition + qualitative context
+3. Build `differentiateLesson()` method with Glass Box output structure
+4. Create reasoning trace viewer component
+5. Run validation: same lesson for Gerryana (High Need/Low Ambition) vs Ross (Low Need/High Ambition) - prove differentiation is meaningful
 
-Would you like to begin with Phase 1?
+**Further Reading:**
+- [Pedagogical Framework](./pedagogical-framework.md) - Complete UDL + Archetypes + Glass Box specification
+- [Glass Box AI Philosophy](https://dylanisa.ac/definitions/glass-box/) - Transparency principles
+- [Student Archetypes Data](https://docs.google.com/spreadsheets/d/1XnRspdFq-qtGOUynWqZdvv6GjOgAEYSlwAwJZdZeXTA/edit?gid=0#gid=0) - Real profiles for testing
