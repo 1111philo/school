@@ -17,7 +17,6 @@ export function ShortResponseActivity({ config, onComplete }: ShortResponseActiv
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [score, setScore] = useState<number | null>(null);
-    const { settings } = useAppStore();
 
     const handleSubmit = async () => {
         if (!response.trim()) return;
@@ -25,20 +24,30 @@ export function ShortResponseActivity({ config, onComplete }: ShortResponseActiv
         setIsSubmitting(true);
         try {
             const service = GenAIService.getInstance();
-            service.setApiKey(settings.apiKey);
+            service.setApiKey(useAppStore.getState().settings.apiKey);
+
+            // Construct submission object
+            const submission = {
+                type: 'short-response',
+                question: config.question,
+                answer: response,
+                rubric: config.rubric
+            };
+
+            // Assuming learningObjectives is an empty array if not explicitly defined elsewhere
+            const learningObjectives: string[] = [];
 
             const result = await service.assessActivity(
-                'short-response',
-                config.question,
-                response,
-                config.rubric
+                submission,
+                learningObjectives
             );
 
             setScore(result.score);
             setFeedback(result.feedback);
             onComplete(result.score, result.feedback);
         } catch (error) {
-            console.error("Failed to assess response", error);
+            console.error('Failed to submit response:', error);
+            // Handle error (maybe show a toast)
             setFeedback("Sorry, I couldn't assess your response right now. Please try again.");
         } finally {
             setIsSubmitting(false);

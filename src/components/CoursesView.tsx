@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { BookOpen, Plus, Trash2 } from 'lucide-react';
+import { CourseEditor } from './CourseEditor';
 
 export function CoursesView() {
-    const { savedCourses, loadCourse, deleteCourse, startNewChat } = useAppStore();
+    const { savedCourses, loadCourse, deleteCourse, generateCourse, isGenerating } = useAppStore();
+    const [showCourseEditor, setShowCourseEditor] = useState(false);
 
     const formatDate = (timestamp: number) => {
         return new Date(timestamp).toLocaleDateString('en-US', {
@@ -14,6 +17,19 @@ export function CoursesView() {
             year: 'numeric'
         });
     };
+
+    if (showCourseEditor) {
+        return (
+            <CourseEditor
+                isGenerating={isGenerating}
+                onCancel={() => setShowCourseEditor(false)}
+                onSave={async (courseData) => {
+                    await generateCourse(courseData);
+                    setShowCourseEditor(false);
+                }}
+            />
+        );
+    }
 
     return (
         <div className="max-w-6xl mx-auto p-8">
@@ -28,10 +44,12 @@ export function CoursesView() {
                             : `${savedCourses.length} course${savedCourses.length !== 1 ? 's' : ''}`}
                     </p>
                 </div>
-                <Button onClick={startNewChat} size="lg" className="gap-2">
-                    <Plus className="w-5 h-5" />
-                    New Course
-                </Button>
+                <div className="flex gap-2">
+                    <Button onClick={() => setShowCourseEditor(true)} size="lg" className="gap-2">
+                        <Plus className="w-5 h-5" />
+                        New Course
+                    </Button>
+                </div>
             </div>
 
             {savedCourses.length === 0 ? (
@@ -43,9 +61,9 @@ export function CoursesView() {
                     <BookOpen className="w-16 h-16 text-muted-foreground/50 mb-4" />
                     <h2 className="text-xl font-semibold text-muted-foreground mb-2">No courses yet</h2>
                     <p className="text-muted-foreground mb-6">
-                        Start a conversation with our AI to create your first personalized course
+                        Create your first personalized course to get started
                     </p>
-                    <Button onClick={startNewChat} size="lg">
+                    <Button onClick={() => setShowCourseEditor(true)} size="lg">
                         <Plus className="w-5 h-5 mr-2" />
                         Start New Course
                     </Button>

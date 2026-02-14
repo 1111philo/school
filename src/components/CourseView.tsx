@@ -3,16 +3,18 @@ import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, Circle, ArrowLeft, Loader2 } from 'lucide-react';
+import { CheckCircle, Circle, ArrowLeft, Loader2, Settings, Target, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import { ActivityRenderer } from './activities/ActivityRenderer';
+import { CourseEditor } from './CourseEditor';
 
 export function CourseView() {
-    const { currentCourse, currentLessonIndex, completeLesson, generateNextLesson, retryLesson, addLog, setAppState, setCurrentLessonIndex, isGenerating } = useAppStore();
+    const { currentCourse, currentLessonIndex, completeLesson, generateNextLesson, retryLesson, addLog, setAppState, setCurrentLessonIndex, isGenerating, deleteCurrentCourseAndRegenerate, generateLessonActivity } = useAppStore();
     const [activityScore, setActivityScore] = useState<number | null>(null);
     const [activityFeedback, setActivityFeedback] = useState<string | null>(null);
     const [showActivityResult, setShowActivityResult] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
 
     // Reset state when changing lessons
     useEffect(() => {
@@ -24,15 +26,31 @@ export function CourseView() {
 
     if (!currentCourse) return null;
 
+    if (isEditing) {
+        return (
+            <CourseEditor
+                isGenerating={isGenerating}
+                initialData={currentCourse}
+                onCancel={() => setIsEditing(false)}
+                onSave={async (data) => {
+                    await deleteCurrentCourseAndRegenerate(data);
+                    setIsEditing(false);
+                }}
+            />
+        );
+    }
+
     const activeLesson = currentCourse.lessons[currentLessonIndex];
     const activeLessonRoadmap = currentCourse.roadmap[currentLessonIndex];
     const isLastLesson = currentLessonIndex >= currentCourse.roadmap.length - 1;
-    const passingScore = activeLesson?.activity.passingScore || 70;
+    const passingScore = activeLesson?.activity?.passingScore || 70;
 
     const handleActivityComplete = async (score: number, feedback?: string) => {
         setActivityScore(score);
         if (feedback) setActivityFeedback(feedback);
         setShowActivityResult(true);
+
+        if (!activeLesson.activity) return; // Should not happen
 
         const passed = score >= passingScore;
 
@@ -76,8 +94,15 @@ export function CourseView() {
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Courses
                 </Button>
-                <div className="text-sm text-muted-foreground">
-                    Lesson {currentLessonIndex + 1} of {currentCourse.roadmap.length}
+
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Settings
+                    </Button>
+                    <div className="text-sm text-muted-foreground ml-2">
+                        Lesson {currentLessonIndex + 1} of {currentCourse.roadmap.length}
+                    </div>
                 </div>
             </div>
 
@@ -160,6 +185,21 @@ export function CourseView() {
                                 >
                                     <div className="prose dark:prose-invert max-w-none">
                                         <h2>{activeLesson.title}</h2>
+
+                                        {activeLesson.learningObjectives && activeLesson.learningObjectives.length > 0 && (
+                                            <div className="not-prose my-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
+                                                <h3 className="font-semibold mb-2 flex items-center gap-2 text-primary">
+                                                    <Target className="w-4 h-4" />
+                                                    Learning Objectives
+                                                </h3>
+                                                <ul className="list-disc list-inside space-y-1 text-sm text-foreground/80">
+                                                    {activeLesson.learningObjectives.map((obj, i) => (
+                                                        <li key={i}>{obj}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
                                         <ReactMarkdown>{activeLesson.content}</ReactMarkdown>
 
                                         {activeLesson.visualExplanation && (
@@ -175,25 +215,61 @@ export function CourseView() {
                                     </div>
 
                                     {/* Activity Section */}
-                                    {!activeLesson.isCompleted && !showActivityResult && activeLesson.activity && (
+                                    {!activeLesson.isCompleted && !showActivityResult && (
                                         <div className="mt-8 pt-6 border-t border-border/40">
-                                            <h3 className="text-lg font-semibold mb-4">
-                                                Interactive Activity{activeLesson.attempts && activeLesson.attempts > 0 && (
-                                                    <span className="text-sm text-muted-foreground ml-2">
-                                                        (Attempt {activeLesson.attempts + 1})
-                                                    </span>
-                                                )}
-                                            </h3>
-                                            {isGenerating ? (
-                                                <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                                                    <p className="text-muted-foreground">Creating a new learning activity for you...</p>
-                                                </div>
+                                            {activeLesson.activity ? (
+                                                <>
+                                                    <h3 className="text-lg font-semibold mb-4">
+                                                        Interactive Activity{activeLesson.attempts && activeLesson.attempts > 0 && (
+                                                            <span className="text-sm text-muted-foreground ml-2">
+                                                                (Attempt {activeLesson.attempts + 1})
+                                                            </span>
+                                                        )}
+                                                    </h3>
+                                                    {isGenerating ? (
+                                                        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                                                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                                            <p className="text-muted-foreground">Creating a new learning activity for you...</p>
+                                                        </div>
+                                                    ) : (
+                                                        <ActivityRenderer
+                                                            activity={activeLesson.activity}
+                                                            onComplete={handleActivityComplete}
+                                                            learningObjectives={activeLesson.learningObjectives}
+                                                            prePrompts={currentCourse.prePrompts}
+                                                        />
+                                                    )}
+                                                </>
                                             ) : (
-                                                <ActivityRenderer
-                                                    activity={activeLesson.activity}
-                                                    onComplete={handleActivityComplete}
-                                                />
+                                                <div className="flex flex-col items-center justify-center py-8 space-y-4 text-center">
+                                                    <div className="p-3 bg-primary/10 rounded-full">
+                                                        <Sparkles className="w-8 h-8 text-primary" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-lg font-semibold mb-1">Ready to practice?</h3>
+                                                        <p className="text-muted-foreground max-w-md mx-auto">
+                                                            Generate a custom interactive activity to test your knowledge against the learning objectives.
+                                                        </p>
+                                                    </div>
+                                                    <Button
+                                                        onClick={() => generateLessonActivity(activeLesson.id)}
+                                                        disabled={isGenerating}
+                                                        size="lg"
+                                                        className="mt-4"
+                                                    >
+                                                        {isGenerating ? (
+                                                            <>
+                                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                                Generating Activity...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Sparkles className="w-4 h-4 mr-2" />
+                                                                Generate Activity
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -311,9 +387,16 @@ export function CourseView() {
                                             This lesson hasn't been generated yet. Complete the previous lesson to unlock it.
                                         </p>
                                         {/* Allow manual generation if previous lesson is completed but this one isn't generated */}
-                                        {currentLessonIndex > 0 && currentCourse.lessons[currentLessonIndex - 1]?.isCompleted && (
+                                        {((currentLessonIndex > 0 && currentCourse.lessons[currentLessonIndex - 1]?.isCompleted) || currentLessonIndex === 0) && (
                                             <Button
-                                                onClick={() => generateNextLesson(currentCourse.lessons[currentLessonIndex - 1].comprehensionScore || 100)}
+                                                onClick={() => {
+                                                    if (currentLessonIndex === 0) {
+                                                        // For first lesson, we don't have a score, pass 100 as dummy or handle in store
+                                                        generateNextLesson(100);
+                                                    } else {
+                                                        generateNextLesson(currentCourse.lessons[currentLessonIndex - 1].comprehensionScore || 100);
+                                                    }
+                                                }}
                                                 variant="default"
                                             >
                                                 Generate Lesson

@@ -2,14 +2,14 @@ import type { ReactNode } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
 import { LogViewer } from './LogViewer';
-import { BookOpen, Settings, MessageSquarePlus } from 'lucide-react';
+import { BookOpen, Settings } from 'lucide-react';
 
 interface LayoutProps {
     children: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
-    const { appState, setAppState, startNewChat } = useAppStore();
+    const { appState, setAppState } = useAppStore();
 
     return (
         <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
@@ -24,12 +24,6 @@ export function Layout({ children }: LayoutProps) {
                             <Button variant="ghost" size="sm" onClick={() => setAppState('COURSES')}>
                                 <BookOpen className="w-4 h-4 mr-2" />
                                 Courses
-                            </Button>
-                        )}
-                        {appState !== 'CHAT' && (
-                            <Button variant="ghost" size="sm" onClick={startNewChat}>
-                                <MessageSquarePlus className="w-4 h-4 mr-2" />
-                                New Chat
                             </Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => setAppState('SETTINGS')}>

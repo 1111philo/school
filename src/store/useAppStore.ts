@@ -1,11 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppState, ChatMessage, Course, LogEntry, UserSettings, SavedCourse, ChatSession } from '../types';
+import type { AppState, Course, LogEntry, UserSettings, SavedCourse } from '../types';
 import { GenAIService } from '../services/GenAIService';
 
 interface AppStore {
     appState: AppState;
-    activeChatSession: ChatSession | null;
     savedCourses: SavedCourse[];
     currentCourseId: string | null;
     currentCourse: Course | null;
@@ -15,14 +14,14 @@ interface AppStore {
     settings: UserSettings;
 
     // Actions
-    addMessage: (message: ChatMessage) => void;
     setAppState: (state: AppState) => void;
-    startNewChat: () => void;
-    sendMessage: (content: string) => Promise<void>;
-    generateCourse: () => Promise<void>;
+    generateCourse: (courseData: Partial<Course>) => Promise<void>;
     saveCourse: (course: Course) => void;
     loadCourse: (courseId: string) => void;
     deleteCourse: (courseId: string) => void;
+    deleteCurrentCourseAndRegenerate: (courseData: Partial<Course>) => Promise<void>;
+    importCourse: (course: SavedCourse) => void;
+    generateLessonActivity: (lessonId: string) => Promise<void>;
     generateNextLesson: (comprehensionScore: number) => Promise<void>;
     retryLesson: (lessonId: string, previousScore: number) => Promise<void>;
     completeLesson: (lessonId: string, comprehensionScore: number) => void;
@@ -37,7 +36,6 @@ export const useAppStore = create<AppStore>()(
     persist(
         (set, get) => ({
             appState: 'COURSES',
-            activeChatSession: null,
             savedCourses: [],
             currentCourseId: null,
             currentCourse: null,
@@ -53,7 +51,6 @@ export const useAppStore = create<AppStore>()(
                 localStorage.removeItem('1111-school-storage');
                 set({
                     appState: 'COURSES',
-                    activeChatSession: null,
                     savedCourses: [],
                     currentCourseId: null,
                     currentCourse: null,
@@ -67,80 +64,11 @@ export const useAppStore = create<AppStore>()(
                 window.location.reload(); // Force reload to ensure clean state
             },
 
-            addMessage: (message) => set((state) => {
-                if (!state.activeChatSession) return {};
-                return {
-                    activeChatSession: {
-                        ...state.activeChatSession,
-                        messages: [...state.activeChatSession.messages, message]
-                    }
-                };
-            }),
-
             setAppState: (state) => set({ appState: state }),
 
-            startNewChat: () => set({
-                activeChatSession: {
-                    id: Math.random().toString(36).substring(7),
-                    messages: [{
-                        id: 'welcome',
-                        role: 'assistant',
-                        content: "Hello! I'm your personal AI tutor. Tell me what you'd like to learn about today, and I'll design a custom course just for you.",
-                        timestamp: Date.now()
-                    }],
-                    startedAt: Date.now()
-                },
-                appState: 'CHAT'
-            }),
-
-            sendMessage: async (content: string) => {
-                const { activeChatSession, addMessage, settings, addLog, isGenerating } = get();
-                if (!activeChatSession || isGenerating) return;
-
-                const userMsg: ChatMessage = {
-                    id: Math.random().toString(36).substring(7),
-                    role: 'user',
-                    content,
-                    timestamp: Date.now()
-                };
-
-                addMessage(userMsg);
-                set({ isGenerating: true });
-
-                try {
-                    const service = GenAIService.getInstance();
-                    service.setApiKey(settings.apiKey);
-
-                    const { response, reasoning } = await service.continueConversation(
-                        activeChatSession.messages.concat(userMsg),
-                        settings
-                    );
-
-                    addLog('Continue Conversation', reasoning);
-
-                    addMessage({
-                        id: Math.random().toString(36).substring(7),
-                        role: 'assistant',
-                        content: response,
-                        timestamp: Date.now()
-                    });
-                } catch (error) {
-                    console.error("Failed to send message", error);
-                    addLog('Error', `Failed to send message: ${error}`);
-                    addMessage({
-                        id: Math.random().toString(36).substring(7),
-                        role: 'assistant',
-                        content: `I'm sorry, I encountered an error. Error details: ${error instanceof Error ? error.message : String(error)}`,
-                        timestamp: Date.now()
-                    });
-                } finally {
-                    set({ isGenerating: false });
-                }
-            },
-
-            generateCourse: async () => {
-                const { activeChatSession, settings, addLog, isGenerating } = get();
-                if (!activeChatSession || isGenerating) return;
+            generateCourse: async (courseData: Partial<Course>) => {
+                const { settings, addLog, isGenerating } = get();
+                if (isGenerating) return;
 
                 set({ isGenerating: true, appState: 'COURSE_GENERATION' });
 
@@ -149,7 +77,7 @@ export const useAppStore = create<AppStore>()(
                     service.setApiKey(settings.apiKey);
 
                     const { course, reasoning } = await service.generateCourse(
-                        activeChatSession.messages,
+                        courseData,
                         settings
                     );
 
@@ -177,8 +105,7 @@ export const useAppStore = create<AppStore>()(
                         progress: 0,
                         totalLessons: course.roadmap.length,
                         completedLessons: 0,
-                        course,
-                        chatHistory: activeChatSession.messages
+                        course
                     };
 
                     set((state) => ({
@@ -186,13 +113,13 @@ export const useAppStore = create<AppStore>()(
                         currentCourseId: course.id,
                         currentCourse: course,
                         currentLessonIndex: 0,
-                        appState: 'LEARNING',
-                        activeChatSession: null
+                        appState: 'LEARNING'
                     }));
                 } catch (error) {
                     console.error("Failed to generate course", error);
                     addLog('Error', `Failed to generate course: ${error}`);
-                    set({ appState: 'CHAT' });
+                    alert(`Failed to generate course: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    set({ appState: 'COURSES' });
                 } finally {
                     set({ isGenerating: false });
                 }
@@ -231,6 +158,65 @@ export const useAppStore = create<AppStore>()(
                 }));
             },
 
+            deleteCurrentCourseAndRegenerate: async (courseData: Partial<Course>) => {
+                const { currentCourseId, deleteCourse, generateCourse } = get();
+                if (currentCourseId) {
+                    deleteCourse(currentCourseId);
+                }
+                await generateCourse(courseData);
+            },
+
+            importCourse: (savedCourse: SavedCourse) => {
+                set((state) => ({
+                    savedCourses: [...state.savedCourses, savedCourse]
+                }));
+            },
+
+            generateLessonActivity: async (lessonId: string) => {
+                const { currentCourse, settings, addLog, isGenerating } = get();
+                if (!currentCourse || isGenerating) return;
+
+                const lesson = currentCourse.lessons.find(l => l.id === lessonId);
+                if (!lesson) return;
+
+                set({ isGenerating: true });
+
+                try {
+                    const service = GenAIService.getInstance();
+                    service.setApiKey(settings.apiKey);
+
+                    const { activity, reasoning } = await service.generateActivity(lesson, settings, {
+                        prePrompts: currentCourse.prePrompts
+                    });
+
+                    addLog('Generate Activity', reasoning);
+
+                    set((state) => {
+                        if (!state.currentCourse || !state.currentCourseId) return {};
+
+                        const updatedLessons = state.currentCourse.lessons.map(l =>
+                            l.id === lessonId ? { ...l, activity } : l
+                        );
+
+                        const updatedCourse = { ...state.currentCourse, lessons: updatedLessons };
+
+                        return {
+                            currentCourse: updatedCourse,
+                            savedCourses: state.savedCourses.map(c =>
+                                c.id === state.currentCourseId
+                                    ? { ...c, course: updatedCourse }
+                                    : c
+                            )
+                        };
+                    });
+                } catch (error) {
+                    console.error("Failed to generate activity", error);
+                    addLog('Error', `Failed to generate activity: ${error}`);
+                } finally {
+                    set({ isGenerating: false });
+                }
+            },
+
             generateNextLesson: async (comprehensionScore: number) => {
                 const { currentCourse, currentLessonIndex, settings, addLog, isGenerating } = get();
                 if (!currentCourse || isGenerating) return;
@@ -250,20 +236,22 @@ export const useAppStore = create<AppStore>()(
                     service.setApiKey(settings.apiKey);
 
                     // Previous lesson is at index - 1
-                    const previousLesson = currentCourse.lessons[nextIndex - 1];
+                    // If generating the first lesson (index 0), there is no previous lesson.
+                    const previousLesson = nextIndex > 0 ? currentCourse.lessons[nextIndex - 1] : null;
                     const nextLessonRoadmap = currentCourse.roadmap[nextIndex];
 
-                    if (!previousLesson) {
+                    if (nextIndex > 0 && !previousLesson) {
                         console.error("Previous lesson not found");
                         return;
                     }
 
                     const { lesson, reasoning } = await service.generateNextLesson(
                         currentCourse,
-                        previousLesson,
+                        previousLesson!, // Service handles null for first lesson if we update it
                         comprehensionScore,
                         nextLessonRoadmap,
-                        settings
+                        settings,
+                        currentCourse.lessonPrompts
                     );
 
                     // Generate visual explanation if visualPrompt exists
@@ -324,7 +312,8 @@ export const useAppStore = create<AppStore>()(
                     const { activity, reasoning } = await service.generateRemedialActivity(
                         lesson,
                         previousScore,
-                        attemptNumber
+                        attemptNumber,
+                        { prePrompts: currentCourse.prePrompts }
                     );
 
                     addLog('Generate Remedial Activity', reasoning);
@@ -410,7 +399,6 @@ export const useAppStore = create<AppStore>()(
 
             resetProgress: () => set({
                 appState: 'COURSES',
-                activeChatSession: null,
                 currentCourseId: null,
                 currentCourse: null,
                 currentLessonIndex: 0,
@@ -421,12 +409,7 @@ export const useAppStore = create<AppStore>()(
             name: '1111-school-storage',
             partialize: (state) => ({
                 settings: state.settings,
-                // Only store essential course data, exclude logs and chat history to save space
-                savedCourses: state.savedCourses.map(course => ({
-                    ...course,
-                    // Limit chat history to last 10 messages to save space
-                    chatHistory: course.chatHistory?.slice(-10) || []
-                }))
+                savedCourses: state.savedCourses
             })
         }
     )

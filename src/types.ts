@@ -1,10 +1,3 @@
-export interface ChatMessage {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: number;
-}
-
 export interface LogEntry {
     id: string;
     timestamp: number;
@@ -13,10 +6,23 @@ export interface LogEntry {
 }
 
 export interface LessonActivity {
-    type: 'multiple-choice' | 'drag-drop' | 'fill-blank' | 'quiz' | 'short-response' | 'drawing';
-    config: MultipleChoiceConfig | DragDropConfig | FillBlankConfig | QuizConfig | ShortResponseConfig | DrawingConfig;
+    type: 'multiple-choice' | 'drag-drop' | 'fill-blank' | 'quiz' | 'short-response' | 'drawing' | 'custom-code' | 'file-upload';
+    config: MultipleChoiceConfig | DragDropConfig | FillBlankConfig | QuizConfig | ShortResponseConfig | DrawingConfig | CustomCodeConfig | FileUploadConfig;
     passingScore: number;
     attemptNumber?: number; // Track remedial attempts
+}
+
+export interface CustomCodeConfig {
+    html: string;
+    css: string;
+    js: string;
+    instructions: string;
+}
+
+export interface FileUploadConfig {
+    title: string;
+    instructions: string;
+    allowedTypes: 'any' | 'image' | 'text';
 }
 
 export interface MultipleChoiceConfig {
@@ -66,7 +72,8 @@ export interface Lesson {
     title: string;
     content: string;
     visualExplanation?: string; // Path to generated visual explanation image
-    activity: LessonActivity;
+    activity?: LessonActivity;
+    learningObjectives?: string[];
     isCompleted: boolean;
     comprehensionScore?: number;
     generatedAt?: number;
@@ -85,8 +92,11 @@ export interface Course {
     id: string;
     title: string;
     description: string;
+    prePrompts?: string;
+    lessonPrompts?: string[];
     roadmap: LessonRoadmap[]; // Overview of all planned lessons
     lessons: Lesson[]; // Only contains generated lessons
+    created: number;
 }
 
 export interface SavedCourse {
@@ -99,16 +109,9 @@ export interface SavedCourse {
     totalLessons: number;
     completedLessons: number;
     course: Course;
-    chatHistory: ChatMessage[];
 }
 
-export interface ChatSession {
-    id: string;
-    messages: ChatMessage[];
-    startedAt: number;
-}
-
-export type AppState = 'CHAT' | 'COURSE_GENERATION' | 'LEARNING' | 'COURSES' | 'SETTINGS';
+export type AppState = 'COURSE_GENERATION' | 'LEARNING' | 'COURSES' | 'SETTINGS';
 
 export interface UserSettings {
     apiKey: string;

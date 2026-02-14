@@ -112,12 +112,19 @@ export function DrawingActivity({ config, onComplete }: DrawingActivityProps) {
             // Get base64 image
             const imageBase64 = canvas.toDataURL('image/jpeg').split(',')[1];
 
+            // Construct submission object
+            const submission = {
+                type: 'drawing',
+                prompt: config.prompt,
+                image: imageBase64,
+                referenceDescription: config.referenceDescription
+            };
+
             const result = await service.assessActivity(
-                'drawing',
-                config.prompt,
-                imageBase64,
-                config.referenceDescription
+                submission,
+                [] // Pass empty learning objectives for now as they are not passed to this component yet
             );
+
 
             setScore(result.score);
             setFeedback(result.feedback);
