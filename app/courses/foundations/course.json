@@ -1,0 +1,21 @@
+{
+  "courseId": "foundations",
+  "version": "1.0.0",
+  "name": "Foundations",
+  "description": "Build core professional and digital habits: communicate clearly, use common workplace tools, stay organized, manage time, measure impact, and establish a digital portfolio.",
+  "learningObjectives": [
+    "I can communicate my professional purpose and motivation in writing, digitally, quickly, clearly, and effectively using assistive tools.",
+    "I can use the technology that's commonly used to accomplish the job that I want to be able to do",
+    "I can organize my information, thinking, and documents in a way that I can find what I need quickly and consistently without losing or forgetting things.",
+    "I can motivate myself and prioritize my time to get the most important things done effectively without getting overwhelmed or too distracted.",
+    "I can measure & articulate the impact of projects toward a goal and track that metric over time.",
+    "I understand the importance of a digital portfolio and online professional profiles."
+  ],
+  "tags": [
+    "foundations",
+    "digital-skills",
+    "productivity",
+    "professional-development"
+  ],
+  "estimatedHours": 4.5
+}

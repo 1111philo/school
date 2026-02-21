@@ -1,0 +1,23 @@
+{
+  "courseId": "wordpress",
+  "version": "1.0.0",
+  "name": "WordPress",
+  "description": "Explore careers in the WordPress ecosystem while building job-aligned web content, using LLMs responsibly, understanding open-source fundamentals, and navigating full-stack concepts with AI support.",
+  "learningObjectives": [
+    "I can articulate why I'm uniquely interested in WordPress, and what skills I offer the WordPress community.",
+    "I understand what jobs WordPress offers, what roles I am best suited for now, and what roles I hope to grow into.",
+    "I can create professional web content that is aligned with my job interests using WordPress.",
+    "I can use LLMs to produce professional work aligned with my job interests.",
+    "I can leverage AI tools to navigate technical concepts around Full Stack WordPress development.",
+    "I understand the fundamentals of Open Source development, and how the WordPress community builds on those fundamentals.",
+    "I can help a team adopt, scale, and implement new AI tools to improve team outcomes."
+  ],
+  "tags": [
+    "wordpress",
+    "open-source",
+    "web-development",
+    "content",
+    "ai"
+  ],
+  "estimatedHours": 5.0
+}

@@ -1,0 +1,21 @@
+{
+  "courseId": "ai-leadership",
+  "version": "1.0.0",
+  "name": "AI Leadership",
+  "description": "Learn how generative and agentic AI works at a practical level, apply it to real tasks, improve ideation and learning workflows, and define an ethics-informed approach to AI use.",
+  "learningObjectives": [
+    "I can understand the basic math and science concepts that make generative and agentic AI tools work",
+    "I can use AI on appropriate tasks to do better work in less time with fewer resources.",
+    "I can use AI to generate multiple ideas and improve upon the best.",
+    "I can efficiently use & improve AI to learn new skills and integrate new tools as tech trend cycles evolve.",
+    "I understand major issues in AI ethics and take a clear stand on my personal approach to AI ethics."
+  ],
+  "tags": [
+    "ai",
+    "leadership",
+    "generative-ai",
+    "ethics",
+    "productivity"
+  ],
+  "estimatedHours": 4.0
+}

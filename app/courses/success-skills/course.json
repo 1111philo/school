@@ -1,0 +1,21 @@
+{
+  "courseId": "success-skills",
+  "version": "1.0.0",
+  "name": "Success Skills",
+  "description": "Develop career success fundamentals: personal branding, wage planning and advocacy, networking with mentors/peers, healthy conflict navigation, and clear, compelling professional presentation.",
+  "learningObjectives": [
+    "I can create a compelling personal brand to help me earn the opportunities I seek",
+    "I can plan and advocate for Living Wages that help me realize my lifestyle goals",
+    "I can connect with professional peers and mentors and use those connections to realize my career goals",
+    "I can navigate multiple types of conflict in healthy ways that help me realize positive outcomes",
+    "I can present myself and my work in ways that are clear and compelling"
+  ],
+  "tags": [
+    "career",
+    "communication",
+    "networking",
+    "conflict-resolution",
+    "personal-brand"
+  ],
+  "estimatedHours": 4.0
+}
