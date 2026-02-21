@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { MultipleChoiceConfig } from '@/types';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAppStore } from '@/store/useAppStore';
 
 interface MultipleChoiceActivityProps {
     config: MultipleChoiceConfig;
@@ -16,8 +17,44 @@ export function MultipleChoiceActivity({ config, onComplete }: MultipleChoiceAct
     const [showFeedback, setShowFeedback] = useState(false);
     const [correctCount, setCorrectCount] = useState(0);
     const [missedQuestions, setMissedQuestions] = useState<number[]>([]);
+    const { currentCourse, currentLessonIndex, generateNextLesson, isGenerating } = useAppStore();
+
+    const handleRegenerate = async () => {
+        if (!currentCourse) return;
+        // Regenerate the current lesson by passing the previous lesson's score (or 100 for first lesson)
+        const prevScore = currentLessonIndex > 0
+            ? currentCourse.lessons[currentLessonIndex - 1]?.comprehensionScore || 100
+            : 100;
+        await generateNextLesson(prevScore);
+    };
+
+    if (!config.questions || config.questions.length === 0) {
+        return (
+            <Card className="p-8 text-center space-y-4 bg-muted/20 border-dashed">
+                <p className="text-muted-foreground font-medium">
+                    This activity structure was malformed during generation.
+                </p>
+                <Button
+                    variant="outline"
+                    onClick={handleRegenerate}
+                    disabled={isGenerating}
+                    className="gap-2"
+                >
+                    {isGenerating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                        <Sparkles className="w-4 h-4" />
+                    )}
+                    Regenerate Activity
+                </Button>
+            </Card>
+        );
+    }
 
     const currentQuestion = config.questions[currentQuestionIndex];
+
+    if (!currentQuestion) return null;
+
     const isLastQuestion = currentQuestionIndex === config.questions.length - 1;
     const isCorrect = selectedAnswer === currentQuestion.correctIndex;
 

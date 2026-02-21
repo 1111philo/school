@@ -9,6 +9,8 @@ interface AppStore {
     currentCourseId: string | null;
     currentCourse: Course | null;
     currentLessonIndex: number;
+    currentPageIndex: number;
+    completedPageActivities: Record<string, boolean>;
     logs: LogEntry[];
     isGenerating: boolean;
     settings: UserSettings;
@@ -21,12 +23,14 @@ interface AppStore {
     deleteCourse: (courseId: string) => void;
     deleteCurrentCourseAndRegenerate: (courseData: Partial<Course>) => Promise<void>;
     importCourse: (course: SavedCourse) => void;
-    generateLessonActivity: (lessonId: string) => Promise<void>;
+    triggerAssessmentGeneration: (lessonId: string) => Promise<void>;
     generateNextLesson: (comprehensionScore: number) => Promise<void>;
     retryLesson: (lessonId: string, previousScore: number) => Promise<void>;
     completeLesson: (lessonId: string, comprehensionScore: number) => void;
     setCurrentLessonIndex: (index: number) => void;
-    addLog: (action: string, reasoning: string) => void;
+    setCurrentPageIndex: (index: number) => void;
+    markPageActivityComplete: (pageId: string) => void;
+    addLog: (action: string, reasoning: string, prompt?: string, response?: string, usage?: LogEntry['usage']) => void;
     updateSettings: (settings: Partial<UserSettings>) => void;
     resetProgress: () => void;
     clearAllData: () => void;
@@ -40,6 +44,8 @@ export const useAppStore = create<AppStore>()(
             currentCourseId: null,
             currentCourse: null,
             currentLessonIndex: 0,
+            currentPageIndex: 0,
+            completedPageActivities: {},
             logs: [],
             isGenerating: false,
             settings: {
@@ -55,6 +61,8 @@ export const useAppStore = create<AppStore>()(
                     currentCourseId: null,
                     currentCourse: null,
                     currentLessonIndex: 0,
+                    currentPageIndex: 0,
+                    completedPageActivities: {},
                     logs: [],
                     settings: {
                         apiKey: '',
@@ -76,24 +84,30 @@ export const useAppStore = create<AppStore>()(
                     const service = GenAIService.getInstance();
                     service.setApiKey(settings.apiKey);
 
-                    const { course, reasoning } = await service.generateCourse(
+                    const { course, reasoning, prompt, response, usage } = await service.generateCourse(
                         courseData,
                         settings
                     );
 
-                    // Generate visual explanation for the first lesson if visualPrompt exists
-                    if (course.lessons[0] && (course.lessons[0] as any).visualPrompt) {
-                        const { generateLessonVisual } = await import('../services/visualGenerator');
-                        const visualUrl = await generateLessonVisual(
-                            course.lessons[0],
-                            (course.lessons[0] as any).visualPrompt,
-                            settings.apiKey,
-                            { model: 'flash', aspectRatio: '16:9' } // Fast generation for initial lesson
-                        );
-                        course.lessons[0].visualExplanation = visualUrl;
+                    // Generate course visual
+                    if (course.visualPrompt) {
+                        try {
+                            const { generateCourseVisual } = await import('../services/visualGenerator');
+                            const visualUrl = await generateCourseVisual(
+                                course.title,
+                                course.visualPrompt,
+                                settings.apiKey,
+                                { model: 'flash', aspectRatio: '16:9' }
+                            );
+                            course.imageUrl = visualUrl;
+                        } catch (e) {
+                            console.error("Failed to generate course visual", e);
+                        }
                     }
 
-                    addLog('Generate Course', reasoning);
+                    // We no longer generate the first lesson's visual here, because it's empty.
+
+                    addLog('Generate Course', reasoning, prompt, response, usage);
 
                     // Save the course
                     const savedCourse: SavedCourse = {
@@ -113,8 +127,13 @@ export const useAppStore = create<AppStore>()(
                         currentCourseId: course.id,
                         currentCourse: course,
                         currentLessonIndex: 0,
+                        currentPageIndex: 0,
+                        completedPageActivities: {},
                         appState: 'LEARNING'
                     }));
+
+                    // We now generate the first lesson asynchronously after transitioning to LEARNING state
+                    get().generateNextLesson(100);
                 } catch (error) {
                     console.error("Failed to generate course", error);
                     addLog('Error', `Failed to generate course: ${error}`);
@@ -140,6 +159,8 @@ export const useAppStore = create<AppStore>()(
                         currentCourseId: courseId,
                         currentCourse: savedCourse.course,
                         currentLessonIndex: savedCourse.completedLessons,
+                        currentPageIndex: savedCourse.currentPageIndex || 0,
+                        completedPageActivities: savedCourse.completedPageActivities || {},
                         appState: 'LEARNING'
                     });
 
@@ -172,7 +193,7 @@ export const useAppStore = create<AppStore>()(
                 }));
             },
 
-            generateLessonActivity: async (lessonId: string) => {
+            triggerAssessmentGeneration: async (lessonId: string) => {
                 const { currentCourse, settings, addLog, isGenerating } = get();
                 if (!currentCourse || isGenerating) return;
 
@@ -185,17 +206,17 @@ export const useAppStore = create<AppStore>()(
                     const service = GenAIService.getInstance();
                     service.setApiKey(settings.apiKey);
 
-                    const { activity, reasoning } = await service.generateActivity(lesson, settings, {
+                    const { assessment, reasoning, prompt, response, usage } = await service.generateAssessment(lesson, settings, {
                         prePrompts: currentCourse.prePrompts
                     });
 
-                    addLog('Generate Activity', reasoning);
+                    addLog('Generate Assessment', reasoning, prompt, response, usage);
 
                     set((state) => {
                         if (!state.currentCourse || !state.currentCourseId) return {};
 
                         const updatedLessons = state.currentCourse.lessons.map(l =>
-                            l.id === lessonId ? { ...l, activity } : l
+                            l.id === lessonId ? { ...l, assessment } : l
                         );
 
                         const updatedCourse = { ...state.currentCourse, lessons: updatedLessons };
@@ -245,28 +266,18 @@ export const useAppStore = create<AppStore>()(
                         return;
                     }
 
-                    const { lesson, reasoning } = await service.generateNextLesson(
+                    const { lesson, logs: lessonLogs } = await service.generateNextLesson(
                         currentCourse,
                         previousLesson!, // Service handles null for first lesson if we update it
                         comprehensionScore,
                         nextLessonRoadmap,
                         settings,
-                        currentCourse.lessonPrompts
+                        currentCourse.learningObjectives
                     );
 
-                    // Generate visual explanation if visualPrompt exists
-                    if ((lesson as any).visualPrompt) {
-                        const { generateLessonVisual } = await import('../services/visualGenerator');
-                        const visualUrl = await generateLessonVisual(
-                            lesson,
-                            (lesson as any).visualPrompt,
-                            settings.apiKey,
-                            { model: 'flash', aspectRatio: '16:9' } // Fast generation for lessons
-                        );
-                        lesson.visualExplanation = visualUrl;
-                    }
-
-                    addLog('Generate Next Lesson', reasoning);
+                    lessonLogs.forEach(log => {
+                        addLog(log.action, log.reasoning, log.prompt, log.response, log.usage);
+                    });
 
                     set((state) => {
                         if (!state.currentCourse || !state.currentCourseId) return {};
@@ -279,6 +290,8 @@ export const useAppStore = create<AppStore>()(
                         return {
                             currentCourse: updatedCourse,
                             currentLessonIndex: nextIndex,
+                            currentPageIndex: 0,
+                            completedPageActivities: {},
                             savedCourses: state.savedCourses.map(c =>
                                 c.id === state.currentCourseId
                                     ? { ...c, course: updatedCourse, totalLessons: updatedCourse.roadmap.length }
@@ -309,21 +322,21 @@ export const useAppStore = create<AppStore>()(
 
                     const attemptNumber = (lesson.attempts || 0) + 1;
 
-                    const { activity, reasoning } = await service.generateRemedialActivity(
+                    const { activity, reasoning, prompt, response, usage } = await service.generateRemedialActivity(
                         lesson,
                         previousScore,
                         attemptNumber,
                         { prePrompts: currentCourse.prePrompts }
                     );
 
-                    addLog('Generate Remedial Activity', reasoning);
+                    addLog('Generate Remedial Activity', reasoning, prompt, response, usage);
 
                     set((state) => {
                         if (!state.currentCourse || !state.currentCourseId) return {};
 
                         const updatedLessons = state.currentCourse.lessons.map(l =>
                             l.id === lessonId
-                                ? { ...l, activity, attempts: attemptNumber }
+                                ? { ...l, assessment: activity, attempts: attemptNumber }
                                 : l
                         );
 
@@ -364,9 +377,11 @@ export const useAppStore = create<AppStore>()(
                     return {
                         currentCourse: updatedCourse,
                         currentLessonIndex: state.currentLessonIndex + 1,
+                        currentPageIndex: 0,
+                        completedPageActivities: {},
                         savedCourses: state.savedCourses.map(c =>
                             c.id === state.currentCourseId
-                                ? { ...c, course: updatedCourse, completedLessons: completedCount, progress }
+                                ? { ...c, course: updatedCourse, completedLessons: completedCount, progress, currentPageIndex: 0, completedPageActivities: {} }
                                 : c
                         )
                     };
@@ -380,16 +395,59 @@ export const useAppStore = create<AppStore>()(
                     // Ensure index is within valid range
                     const validIndex = Math.max(0, Math.min(index, state.currentCourse.roadmap.length - 1));
 
-                    return { currentLessonIndex: validIndex };
+                    return {
+                        currentLessonIndex: validIndex,
+                        currentPageIndex: 0,
+                        completedPageActivities: {},
+                        savedCourses: state.savedCourses.map(c =>
+                            c.id === state.currentCourseId
+                                ? { ...c, currentPageIndex: 0, completedPageActivities: {} }
+                                : c
+                        )
+                    };
                 });
             },
 
-            addLog: (action, reasoning) => set((state) => ({
+            setCurrentPageIndex: (index: number) => {
+                set((state) => {
+                    const currentCourseId = state.currentCourseId;
+                    if (!currentCourseId) return {};
+                    return {
+                        currentPageIndex: index,
+                        savedCourses: state.savedCourses.map(c =>
+                            c.id === currentCourseId
+                                ? { ...c, currentPageIndex: index }
+                                : c
+                        )
+                    };
+                });
+            },
+
+            markPageActivityComplete: (pageId: string) => {
+                set((state) => {
+                    const currentCourseId = state.currentCourseId;
+                    if (!currentCourseId) return {};
+                    const newCompleted = { ...state.completedPageActivities, [pageId]: true };
+                    return {
+                        completedPageActivities: newCompleted,
+                        savedCourses: state.savedCourses.map(c =>
+                            c.id === currentCourseId
+                                ? { ...c, completedPageActivities: newCompleted }
+                                : c
+                        )
+                    };
+                });
+            },
+
+            addLog: (action, reasoning, prompt, response, usage) => set((state) => ({
                 logs: [...state.logs, {
                     id: Math.random().toString(36).substring(7),
                     timestamp: Date.now(),
                     action,
-                    reasoning
+                    reasoning,
+                    prompt,
+                    response,
+                    usage
                 }]
             })),
 
@@ -402,6 +460,8 @@ export const useAppStore = create<AppStore>()(
                 currentCourseId: null,
                 currentCourse: null,
                 currentLessonIndex: 0,
+                currentPageIndex: 0,
+                completedPageActivities: {},
                 logs: []
             })
         }),

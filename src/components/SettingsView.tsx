@@ -11,8 +11,10 @@ export function SettingsView() {
     const [userName, setUserName] = useState(settings.userName);
 
     const handleSave = () => {
-        updateSettings({ apiKey, userName });
-        if (apiKey && userName) {
+        const trimmedApiKey = apiKey.trim();
+        const trimmedUserName = userName.trim();
+        updateSettings({ apiKey: trimmedApiKey, userName: trimmedUserName });
+        if (trimmedApiKey && trimmedUserName) {
             setAppState('COURSES');
         }
     };

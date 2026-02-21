@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
+import { CardContent } from '@/components/ui/card';
 import { ArrowLeft, Plus, X, Upload, Download } from 'lucide-react';
 import type { Course } from '@/types';
 
@@ -11,14 +11,15 @@ interface CourseEditorProps {
     onSave: (courseData: Partial<Course>) => void;
     onCancel: () => void;
     isGenerating?: boolean;
+    embedded?: boolean;
 }
 
-export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: CourseEditorProps) {
+export function CourseEditor({ initialData, onSave, onCancel, isGenerating, embedded }: CourseEditorProps) {
     const [courseData, setCourseData] = useState<Partial<Course>>({
         title: '',
         description: '',
         prePrompts: '',
-        lessonPrompts: [],
+        learningObjectives: [],
         ...initialData
     });
 
@@ -51,7 +52,7 @@ export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: Co
                         title: importedCourse.title || importedCourse.name,
                         description: importedCourse.description || '',
                         prePrompts: importedCourse.prePrompts || '',
-                        lessonPrompts: importedCourse.lessonPrompts || []
+                        learningObjectives: importedCourse.learningObjectives || importedCourse.lessonPrompts || []
                     });
                 } else {
                     alert('Invalid course file format');
@@ -65,64 +66,77 @@ export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: Co
         event.target.value = ''; // Reset input
     };
 
-    const addLessonPrompt = () => {
+    const addLearningObjective = () => {
         setCourseData(prev => ({
             ...prev,
-            lessonPrompts: [...(prev.lessonPrompts || []), '']
+            learningObjectives: [...(prev.learningObjectives || []), '']
         }));
     };
 
-    const updateLessonPrompt = (index: number, value: string) => {
+    const updateLearningObjective = (index: number, value: string) => {
         setCourseData(prev => {
-            const newPrompts = [...(prev.lessonPrompts || [])];
-            newPrompts[index] = value;
-            return { ...prev, lessonPrompts: newPrompts };
+            const newObjectives = [...(prev.learningObjectives || [])];
+            newObjectives[index] = value;
+            return { ...prev, learningObjectives: newObjectives };
         });
     };
 
-    const removeLessonPrompt = (index: number) => {
+    const removeLearningObjective = (index: number) => {
         setCourseData(prev => {
-            const newPrompts = [...(prev.lessonPrompts || [])];
-            newPrompts.splice(index, 1);
-            return { ...prev, lessonPrompts: newPrompts };
+            const newObjectives = [...(prev.learningObjectives || [])];
+            newObjectives.splice(index, 1);
+            return { ...prev, learningObjectives: newObjectives };
         });
     };
 
     const isValid = courseData.title && courseData.description;
 
     return (
-        <div className="max-w-4xl mx-auto p-4 space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" onClick={onCancel}>
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back
-                    </Button>
-                    <h1 className="text-2xl font-bold">
-                        {initialData?.title ? 'Edit Course Settings' : 'Create New Course'}
-                    </h1>
-                </div>
-                {!initialData?.id && (
-                    <div>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            className="hidden"
-                            accept=".json"
-                            onChange={handleImportFile}
-                        />
-                        <Button variant="outline" onClick={handleImportClick}>
-                            <Upload className="w-4 h-4 mr-2" />
-                            Import JSON
+        <div className={embedded ? "space-y-6" : "max-w-4xl mx-auto p-4 space-y-6"}>
+            {!embedded && (
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" onClick={onCancel}>
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Back
                         </Button>
+                        <h1 className="text-2xl font-bold">
+                            {initialData?.title ? 'Edit Course Settings' : 'Create New Course'}
+                        </h1>
                     </div>
-                )}
-            </div>
+                    {!initialData?.id && (
+                        <div className="text-muted-foreground text-sm">
+                            Fill out the details below to start your journey.
+                        </div>
+                    )}
+                </div>
+            )}
 
-            <Card>
+            <div className={embedded ? "" : "border rounded-xl bg-card text-card-foreground shadow"}>
                 <CardContent className="space-y-4 pt-6">
+                    {!initialData?.id && (
+                        <div className="flex justify-end mb-4">
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept=".json"
+                                onChange={handleImportFile}
+                            />
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleImportClick}
+                                className="h-8 text-xs bg-primary/5 hover:bg-primary/10 border-primary/20"
+                            >
+                                <Upload className="w-3.5 h-3.5 mr-2" />
+                                Import Course JSON
+                            </Button>
+                        </div>
+                    )}
+
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Course Title</label>
+                        <label className="text-sm font-medium">Course Title (Required)</label>
                         <Input
                             value={courseData.title || ''}
                             onChange={(e) => setCourseData({ ...courseData, title: e.target.value })}
@@ -153,24 +167,24 @@ export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: Co
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Lesson Prompts</label>
+                        <label className="text-sm font-medium">Learning Objectives</label>
                         <p className="text-xs text-muted-foreground">
-                            Specific instructions available to be injected when generating individual lessons.
+                            Specific learning objectives for each lesson. The number of objectives determines the number of lessons.
                         </p>
 
                         <div className="space-y-3">
-                            {(courseData.lessonPrompts || []).map((prompt, index) => (
+                            {(courseData.learningObjectives || []).map((objective, index) => (
                                 <div key={index} className="flex gap-2">
                                     <Textarea
                                         className="font-mono text-sm min-h-[60px]"
-                                        value={prompt}
-                                        onChange={(e) => updateLessonPrompt(index, e.target.value)}
-                                        placeholder={`Lesson Prompt #${index + 1}`}
+                                        value={objective}
+                                        onChange={(e) => updateLearningObjective(index, e.target.value)}
+                                        placeholder={`Learning Objective #${index + 1}`}
                                     />
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        onClick={() => removeLessonPrompt(index)}
+                                        onClick={() => removeLearningObjective(index)}
                                         className="text-muted-foreground hover:text-destructive self-start"
                                     >
                                         <X className="w-4 h-4" />
@@ -180,11 +194,11 @@ export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: Co
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={addLessonPrompt}
+                                onClick={addLearningObjective}
                                 className="w-full border-dashed"
                             >
                                 <Plus className="w-4 h-4 mr-2" />
-                                Add Lesson Prompt
+                                Add Learning Objective
                             </Button>
                         </div>
                     </div>
@@ -197,7 +211,7 @@ export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: Co
                                     title: courseData.title,
                                     description: courseData.description,
                                     prePrompts: courseData.prePrompts,
-                                    lessonPrompts: courseData.lessonPrompts
+                                    learningObjectives: courseData.learningObjectives
                                 };
                                 const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(settingsToExport, null, 2));
                                 const downloadAnchorNode = document.createElement('a');
@@ -227,7 +241,7 @@ export function CourseEditor({ initialData, onSave, onCancel, isGenerating }: Co
                         </Button>
                     </div>
                 </CardContent>
-            </Card>
+            </div>
         </div>
     );
 }

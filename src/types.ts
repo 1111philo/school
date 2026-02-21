@@ -3,6 +3,13 @@ export interface LogEntry {
     timestamp: number;
     action: string;
     reasoning: string;
+    prompt?: string;
+    response?: string;
+    usage?: {
+        promptTokens: number;
+        candidatesTokens: number;
+        totalTokens: number;
+    };
 }
 
 export interface LessonActivity {
@@ -67,12 +74,32 @@ export interface DrawingConfig {
     referenceDescription?: string; // Description of what the drawing should look like for the AI
 }
 
+export interface LessonPlan {
+    learningObjective: string;
+    competency: string;
+    enduringUnderstanding: string;
+    essentialQuestions: string[];
+    assessmentProject: string;
+    masteryCriteria: string[];
+    udlAccommodations: string;
+    activities: string[];
+}
+
+export interface LessonPage {
+    id: string;
+    content: string;
+    activity?: LessonActivity;
+}
+
 export interface Lesson {
     id: string;
     title: string;
-    content: string;
+    plan?: LessonPlan;
+    pages: LessonPage[];
+    assessment?: LessonActivity; // Final assessment project
     visualExplanation?: string; // Path to generated visual explanation image
-    activity?: LessonActivity;
+    visualPrompt?: string; // Prompt used to generate the visual explanation image
+    visualPageId?: string; // The ID of the page where the visual should be inserted
     learningObjectives?: string[];
     isCompleted: boolean;
     comprehensionScore?: number;
@@ -93,10 +120,12 @@ export interface Course {
     title: string;
     description: string;
     prePrompts?: string;
-    lessonPrompts?: string[];
+    learningObjectives?: string[];
     roadmap: LessonRoadmap[]; // Overview of all planned lessons
     lessons: Lesson[]; // Only contains generated lessons
     created: number;
+    imageUrl?: string;
+    visualPrompt?: string;
 }
 
 export interface SavedCourse {
@@ -108,6 +137,8 @@ export interface SavedCourse {
     progress: number;
     totalLessons: number;
     completedLessons: number;
+    currentPageIndex?: number;
+    completedPageActivities?: Record<string, boolean>;
     course: Course;
 }
 

@@ -22,6 +22,27 @@ export async function generateLessonVisual(
   apiKey: string,
   options: ImageGenerationOptions = {}
 ): Promise<string> {
+  return _generateImage(lesson.title, visualPrompt, apiKey, options);
+}
+
+/**
+ * Generate a visual explanation image for a course using Gemini Imagen
+ */
+export async function generateCourseVisual(
+  title: string,
+  visualPrompt: string,
+  apiKey: string,
+  options: ImageGenerationOptions = {}
+): Promise<string> {
+  return _generateImage(title, visualPrompt, apiKey, options);
+}
+
+async function _generateImage(
+  title: string,
+  visualPrompt: string,
+  apiKey: string,
+  options: ImageGenerationOptions
+): Promise<string> {
   const {
     model = 'flash',
     aspectRatio = '16:9',
@@ -33,14 +54,12 @@ export async function generateLessonVisual(
 
     // Select the appropriate model
     const modelName = model === 'pro'
-      ? 'gemini-3-pro-image-preview'  // 4K, grounding, thinking process
-      : 'gemini-2.5-flash-image';      // Fast, 1024px
+      ? 'gemini-2.5-flash-image'
+      : 'gemini-2.5-flash-image';
 
-    // Enhance the prompt for better educational diagrams
-    const enhancedPrompt = `Educational diagram: ${visualPrompt}.
-Style: Clean, simple, colorful illustration suitable for learning.
-Clear labels, easy to understand, professional educational design.
-Make it visually engaging and scientifically accurate.`;
+    // Use the visualPrompt directly to allow for varied styles (e.g. abstract, modernist)
+    // without forcing it into a fixed 'educational diagram' look.
+    const enhancedPrompt = visualPrompt;
 
     console.log(`Generating image with ${modelName}:`, enhancedPrompt);
 
@@ -86,7 +105,7 @@ Make it visually engaging and scientifically accurate.`;
             // Convert to data URL for immediate display
             const dataUrl = `data:${mimeType};base64,${imageData}`;
 
-            console.log(`✅ Image generated successfully for "${lesson.title}" using ${modelName}`);
+            console.log(`✅ Image generated successfully for "${title}" using ${modelName}`);
             return dataUrl;
           }
 
@@ -99,7 +118,7 @@ Make it visually engaging and scientifically accurate.`;
     }
 
     console.warn('⚠️ No image in response, using fallback');
-    return createFallbackSVG(lesson.title, visualPrompt);
+    return createFallbackSVG(title, visualPrompt);
   } catch (error) {
     console.error('❌ Failed to generate image with Gemini API:', error);
 
@@ -113,7 +132,7 @@ Make it visually engaging and scientifically accurate.`;
     }
 
     // Fallback to SVG if API fails
-    return createFallbackSVG(lesson.title, visualPrompt);
+    return createFallbackSVG(title, visualPrompt);
   }
 }
 
@@ -130,12 +149,10 @@ export async function generateLessonVisualBatch(
   try {
     const genAI = new GoogleGenAI({ apiKey });
     const modelName = options.model === 'pro'
-      ? 'gemini-3-pro-image-preview'
+      ? 'gemini-2.5-flash-image'
       : 'gemini-2.5-flash-image';
 
-    const enhancedPrompt = `Educational diagram: ${visualPrompt}.
-Style: Clean, simple, colorful illustration suitable for learning.
-Clear labels, easy to understand, professional educational design.`;
+    const enhancedPrompt = visualPrompt;
 
     console.log(`Generating ${count} image variations with ${modelName}`);
 
@@ -239,7 +256,14 @@ function createFallbackSVG(title: string, prompt: string): string {
     </svg>
   `.trim();
 
-  return `data:image/svg+xml;base64,${btoa(svg)}`;
+  try {
+    // Robust Base64 encoding for Unicode
+    const base64 = btoa(unescape(encodeURIComponent(svg)));
+    return `data:image/svg+xml;base64,${base64}`;
+  } catch (error) {
+    console.error('Failed to encode fallback SVG:', error);
+    return ""; // Return empty string if encoding fails
+  }
 }
 
 function escapeXml(text: string): string {

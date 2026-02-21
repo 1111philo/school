@@ -5,8 +5,10 @@ import { CourseGenerationView } from './components/CourseGenerationView';
 import { SettingsView } from './components/SettingsView';
 import { useAppStore } from './store/useAppStore';
 import { useEffect } from 'react';
+import { useRouting } from './hooks/useRouting';
 
 function App() {
+  useRouting();
   const { appState, settings } = useAppStore();
 
   // Initialize chat if no API key is set

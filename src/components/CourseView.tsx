@@ -1,63 +1,78 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, Circle, ArrowLeft, Loader2, Settings, Target, Sparkles } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { CheckCircle, Circle, Loader2, Settings, Target, Sparkles, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import { ActivityRenderer } from './activities/ActivityRenderer';
 import { CourseEditor } from './CourseEditor';
 
 export function CourseView() {
-    const { currentCourse, currentLessonIndex, completeLesson, generateNextLesson, retryLesson, addLog, setAppState, setCurrentLessonIndex, isGenerating, deleteCurrentCourseAndRegenerate, generateLessonActivity } = useAppStore();
+    const { currentCourse, currentLessonIndex, currentPageIndex, completedPageActivities, completeLesson, generateNextLesson, retryLesson, addLog, setAppState, setCurrentLessonIndex, setCurrentPageIndex, markPageActivityComplete, isGenerating, deleteCurrentCourseAndRegenerate, triggerAssessmentGeneration } = useAppStore();
     const [activityScore, setActivityScore] = useState<number | null>(null);
     const [activityFeedback, setActivityFeedback] = useState<string | null>(null);
     const [showActivityResult, setShowActivityResult] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [prevLessonIndex, setPrevLessonIndex] = useState(currentLessonIndex);
 
-    // Reset state when changing lessons
-    useEffect(() => {
+    // Reset local activity result when changing lessons
+    if (currentLessonIndex !== prevLessonIndex) {
+        setPrevLessonIndex(currentLessonIndex);
         setActivityScore(null);
         setActivityFeedback(null);
         setShowActivityResult(false);
-    }, [currentLessonIndex]);
+    }
 
+    const activeLesson = currentCourse?.lessons[currentLessonIndex];
+    const activeLessonRoadmap = currentCourse?.roadmap[currentLessonIndex];
+    const isLastLesson = currentCourse ? currentLessonIndex >= currentCourse.roadmap.length - 1 : false;
+    const passingScore = activeLesson?.assessment?.passingScore || 70;
+
+    const pages = activeLesson?.pages || [];
+    const activePage = (pages && currentPageIndex < pages.length) ? pages[currentPageIndex] : null;
+    const isLastPage = pages.length === 0 || currentPageIndex >= pages.length - 1;
+
+    // Ensure currentPageIndex is always valid
+    useEffect(() => {
+        if (currentPageIndex >= pages.length && pages.length > 0) {
+            setCurrentPageIndex(Math.max(0, pages.length - 1));
+        }
+    }, [pages.length, currentPageIndex, setCurrentPageIndex]);
 
     if (!currentCourse) return null;
 
-    if (isEditing) {
-        return (
-            <CourseEditor
-                isGenerating={isGenerating}
-                initialData={currentCourse}
-                onCancel={() => setIsEditing(false)}
-                onSave={async (data) => {
-                    await deleteCurrentCourseAndRegenerate(data);
-                    setIsEditing(false);
-                }}
-            />
-        );
-    }
-
-    const activeLesson = currentCourse.lessons[currentLessonIndex];
-    const activeLessonRoadmap = currentCourse.roadmap[currentLessonIndex];
-    const isLastLesson = currentLessonIndex >= currentCourse.roadmap.length - 1;
-    const passingScore = activeLesson?.activity?.passingScore || 70;
+    const handlePageActivityComplete = (score: number, _feedback?: string) => {
+        if (!activePage) return;
+        const pagePassingScore = activePage.activity?.passingScore || 70;
+        if (score >= pagePassingScore) {
+            markPageActivityComplete(activePage.id);
+            addLog('Practice Activity Completed', `Scored ${score}/100 on ${activePage.id}`);
+        } else {
+            alert(`Score: ${score}. You need ${pagePassingScore} to proceed. Try again!`);
+        }
+    };
 
     const handleActivityComplete = async (score: number, feedback?: string) => {
         setActivityScore(score);
         if (feedback) setActivityFeedback(feedback);
         setShowActivityResult(true);
 
-        if (!activeLesson.activity) return; // Should not happen
+        if (!activeLesson?.assessment) return; // Should not happen
 
         const passed = score >= passingScore;
 
         if (passed) {
             // Mark lesson as complete
-            completeLesson(activeLesson.id, score);
-            addLog('Lesson Completed', `Scored ${score}/100 on ${activeLesson.title}`);
+            completeLesson(activeLesson!.id, score);
+            addLog('Lesson Completed', `Scored ${score}/100 on ${activeLesson!.title}`);
 
             // Generate next lesson if not the last
             if (!isLastLesson) {
@@ -69,7 +84,7 @@ export function CourseView() {
     };
 
     const handleRetry = async () => {
-        if (activityScore === null) return;
+        if (activityScore === null || !activeLesson) return;
         setShowActivityResult(false);
         setActivityScore(null);
         setActivityFeedback(null);
@@ -87,37 +102,55 @@ export function CourseView() {
     };
 
     return (
-        <div className="max-w-6xl mx-auto space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <Button variant="ghost" onClick={() => setAppState('COURSES')}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Courses
-                </Button>
+        <div className="flex flex-col h-[calc(100vh-65px)] bg-background">
+            {/* Settings Modal */}
+            <Dialog open={isEditing} onOpenChange={setIsEditing}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Course Settings</DialogTitle>
+                        <DialogDescription>
+                            Configure your course parameters. Note: Saving changes will regenerate your entire course roadmap.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <CourseEditor
+                        isGenerating={isGenerating}
+                        initialData={currentCourse}
+                        embedded
+                        onCancel={() => setIsEditing(false)}
+                        onSave={async (data) => {
+                            await deleteCurrentCourseAndRegenerate(data);
+                            setIsEditing(false);
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
 
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-                        <Settings className="w-4 h-4 mr-2" />
-                        Settings
-                    </Button>
-                    <div className="text-sm text-muted-foreground ml-2">
+            {/* Secondary Header */}
+            <div className="flex-none border-b border-border/40 bg-muted/20 px-6 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <h1 className="text-xl font-semibold truncate max-w-md">{currentCourse.title}</h1>
+                    <div className="h-4 w-px bg-border/60" />
+                    <div className="text-sm text-muted-foreground">
                         Lesson {currentLessonIndex + 1} of {currentCourse.roadmap.length}
                     </div>
                 </div>
+
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(true)} className="h-8">
+                        <Settings className="w-3.5 h-3.5 mr-2" />
+                        Course Settings
+                    </Button>
+                </div>
             </div>
 
-            {/* Course Info */}
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold mb-2">{currentCourse.title}</h1>
-                <p className="text-muted-foreground">{currentCourse.description}</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {/* Sidebar - Roadmap */}
-                <Card className="md:col-span-1 bg-background/60 backdrop-blur-md border-primary/10 shadow-lg p-4 flex flex-col max-h-[70vh]">
-                    <h2 className="font-bold text-lg mb-4 text-primary">Course Roadmap</h2>
+            <div className="flex-1 flex overflow-hidden">
+                {/* Sidebar - Roadmap (Left) */}
+                <div className="w-80 flex-none border-r border-border/40 flex flex-col bg-muted/5">
+                    <div className="p-4 border-b border-border/40">
+                        <h2 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Course Roadmap</h2>
+                    </div>
                     <ScrollArea className="flex-1">
-                        <div className="space-y-2">
+                        <div className="p-2 space-y-1">
                             {currentCourse.roadmap.map((roadmapItem, index) => {
                                 const lesson = currentCourse.lessons.find(l => l.id === roadmapItem.id);
                                 const isGenerated = lesson?.isGenerated || false;
@@ -127,16 +160,16 @@ export function CourseView() {
                                     <button
                                         key={roadmapItem.id}
                                         onClick={() => setCurrentLessonIndex(index)}
-                                        className={`w-full text-left p-3 rounded-lg text-sm transition-all flex items-start gap-3 cursor-pointer hover:bg-muted/50 ${isCurrent
-                                            ? 'bg-primary/10 text-primary font-medium hover:bg-primary/20'
+                                        className={`w-full text-left p-3 rounded-lg text-sm transition-all flex items-start gap-3 cursor-pointer ${isCurrent
+                                            ? 'bg-primary/5 text-primary font-medium'
                                             : isCompleted
-                                                ? 'text-muted-foreground'
+                                                ? 'text-muted-foreground hover:bg-muted/50'
                                                 : isGenerated
-                                                    ? 'text-foreground'
-                                                    : 'text-muted-foreground/60'
+                                                    ? 'text-foreground hover:bg-muted/50'
+                                                    : 'text-muted-foreground/60 hover:bg-muted/30'
                                             }`}
                                     >
-                                        <div className="mt-0.5">
+                                        <div className="mt-0.5 shrink-0">
                                             {isCompleted ? (
                                                 <CheckCircle className="w-4 h-4 text-green-500" />
                                             ) : isCurrent && isGenerating && !isGenerated ? (
@@ -146,21 +179,13 @@ export function CourseView() {
                                             )}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="font-medium truncate">
+                                            <div className="font-medium leading-tight">
                                                 {index + 1}. {roadmapItem.title}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                                {roadmapItem.description}
                                             </div>
                                             {isCurrent && isGenerating && !isGenerated && (
                                                 <div className="text-xs text-primary mt-1 italic flex items-center gap-1">
                                                     <Loader2 className="w-3 h-3 animate-spin" />
                                                     Generating...
-                                                </div>
-                                            )}
-                                            {!isGenerated && index > currentLessonIndex && !isGenerating && (
-                                                <div className="text-xs text-muted-foreground/70 mt-1 italic">
-                                                    Not yet generated
                                                 </div>
                                             )}
                                         </div>
@@ -169,103 +194,158 @@ export function CourseView() {
                             })}
                         </div>
                     </ScrollArea>
-                </Card>
+                </div>
 
-                {/* Main Content - Lesson */}
-                <Card className="md:col-span-3 bg-background/60 backdrop-blur-md border-primary/10 shadow-xl p-6 md:p-8 flex flex-col overflow-hidden max-h-[70vh]">
-                    {activeLesson ? (
-                        <div className="flex flex-col h-full">
-                            <ScrollArea className="flex-1 pr-6">
+                {/* Main Content - Lesson (Right) */}
+                <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
+                    <ScrollArea className="flex-1">
+                        <div className="max-w-4xl mx-auto py-12 px-8 md:px-12">
+                            {activeLesson ? (
                                 <motion.div
                                     key={activeLesson.id}
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
                                     transition={{ duration: 0.3 }}
-                                    className="space-y-6"
+                                    className="space-y-8"
                                 >
-                                    <div className="prose dark:prose-invert max-w-none">
-                                        <h2>{activeLesson.title}</h2>
+                                    <div className="space-y-4">
+                                        <h2 className="text-4xl font-bold tracking-tight">{activeLesson.title}</h2>
 
                                         {activeLesson.learningObjectives && activeLesson.learningObjectives.length > 0 && (
-                                            <div className="not-prose my-4 p-4 bg-primary/5 rounded-lg border border-primary/10">
-                                                <h3 className="font-semibold mb-2 flex items-center gap-2 text-primary">
-                                                    <Target className="w-4 h-4" />
-                                                    Learning Objectives
-                                                </h3>
-                                                <ul className="list-disc list-inside space-y-1 text-sm text-foreground/80">
-                                                    {activeLesson.learningObjectives.map((obj, i) => (
-                                                        <li key={i}>{obj}</li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
-
-                                        <ReactMarkdown>{activeLesson.content}</ReactMarkdown>
-
-                                        {activeLesson.visualExplanation && (
-                                            <div className="my-6 p-4 bg-muted/30 rounded-lg border border-border/40">
-                                                <p className="text-sm text-muted-foreground mb-2">Visual Explanation:</p>
-                                                <img
-                                                    src={activeLesson.visualExplanation}
-                                                    alt={`Visual explanation for ${activeLesson.title}`}
-                                                    className="w-full rounded-lg"
-                                                />
+                                            <div className="p-5 bg-primary/5 rounded-xl border border-primary/10 flex gap-4">
+                                                <div className="mt-1">
+                                                    <Target className="w-5 h-5 text-primary" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-sm uppercase tracking-wide text-primary mb-1">Learning Objective</h3>
+                                                    <p className="text-sm text-foreground/90 font-medium leading-relaxed">
+                                                        {activeLesson.learningObjectives[0]}
+                                                    </p>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Activity Section */}
-                                    {!activeLesson.isCompleted && !showActivityResult && (
-                                        <div className="mt-8 pt-6 border-t border-border/40">
-                                            {activeLesson.activity ? (
-                                                <>
-                                                    <h3 className="text-lg font-semibold mb-4">
-                                                        Interactive Activity{activeLesson.attempts && activeLesson.attempts > 0 && (
-                                                            <span className="text-sm text-muted-foreground ml-2">
-                                                                (Attempt {activeLesson.attempts + 1})
+                                    <div className="prose prose-lg dark:prose-invert max-w-none prose-headings:scroll-mt-20 prose-a:text-primary hover:prose-a:text-primary/80">
+                                        <ReactMarkdown
+                                            components={{
+                                                img: ({ node, ...props }) => {
+                                                    if (!props.src) return null;
+                                                    return (
+                                                        <span className="block my-10 p-2 bg-muted/20 rounded-2xl border border-border/40 overflow-hidden shadow-sm">
+                                                            <img
+                                                                {...props}
+                                                                className="w-full rounded-xl"
+                                                                alt={props.alt || "Educational Visual"}
+                                                            />
+                                                        </span>
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            {(activePage && activePage.content) ? activePage.content : "Generating content..."}
+                                        </ReactMarkdown>
+                                    </div>
+
+                                    {/* Intermediate Page Activity (if any) */}
+                                    {activePage && activePage.activity && !activeLesson.isCompleted && (
+                                        <div className="mt-8 p-6 bg-muted/20 border border-border/40 rounded-xl">
+                                            <h4 className="font-bold mb-4 flex items-center gap-2">
+                                                <Sparkles className="w-4 h-4 text-primary" />
+                                                Practice Check
+                                            </h4>
+                                            {completedPageActivities[activePage.id] ? (
+                                                <div className="text-green-500 font-medium flex items-center gap-2">
+                                                    <CheckCircle className="w-5 h-5" /> Completed!
+                                                </div>
+                                            ) : (
+                                                <ActivityRenderer
+                                                    activity={activePage.activity}
+                                                    onComplete={handlePageActivityComplete}
+                                                    learningObjectives={activeLesson.learningObjectives}
+                                                    prePrompts={currentCourse.prePrompts}
+                                                />
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Pagination Controls */}
+                                    {pages.length > 1 && !activeLesson.isCompleted && (
+                                        <div className="flex justify-between items-center py-6 border-t border-border/20">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+                                                disabled={currentPageIndex === 0}
+                                            >
+                                                Previous Page
+                                            </Button>
+                                            <div className="text-sm text-muted-foreground">
+                                                Page {currentPageIndex + 1} of {pages.length}
+                                            </div>
+                                            <Button
+                                                onClick={() => setCurrentPageIndex(Math.min(pages.length - 1, currentPageIndex + 1))}
+                                                disabled={isLastPage || (activePage?.activity != null && !completedPageActivities[activePage.id])}
+                                            >
+                                                Next Page
+                                            </Button>
+                                        </div>
+                                    )}
+
+
+
+                                    {/* Final Assessment Section (Only on Last Page) */}
+                                    {isLastPage && !activeLesson.isCompleted && !showActivityResult && (
+                                        <div className="mt-12 pt-10 border-t border-border/40">
+                                            {activeLesson.assessment ? (
+                                                <div className="space-y-6">
+                                                    <div className="flex items-center gap-2">
+                                                        <Sparkles className="w-5 h-5 text-primary" />
+                                                        <h3 className="text-2xl font-bold">Final Assessment</h3>
+                                                        {activeLesson.attempts && activeLesson.attempts > 0 && (
+                                                            <span className="text-sm font-medium bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                                                                Attempt {activeLesson.attempts + 1}
                                                             </span>
                                                         )}
-                                                    </h3>
+                                                    </div>
+
                                                     {isGenerating ? (
-                                                        <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                                                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                                                            <p className="text-muted-foreground">Creating a new learning activity for you...</p>
+                                                        <div className="flex flex-col items-center justify-center py-20 space-y-4 bg-muted/10 rounded-2xl border border-dashed">
+                                                            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                                                            <p className="font-medium text-muted-foreground">Tailoring an assessment for you...</p>
                                                         </div>
                                                     ) : (
                                                         <ActivityRenderer
-                                                            activity={activeLesson.activity}
+                                                            activity={activeLesson.assessment}
                                                             onComplete={handleActivityComplete}
                                                             learningObjectives={activeLesson.learningObjectives}
                                                             prePrompts={currentCourse.prePrompts}
                                                         />
                                                     )}
-                                                </>
+                                                </div>
                                             ) : (
-                                                <div className="flex flex-col items-center justify-center py-8 space-y-4 text-center">
-                                                    <div className="p-3 bg-primary/10 rounded-full">
-                                                        <Sparkles className="w-8 h-8 text-primary" />
+                                                <div className="flex flex-col items-center justify-center py-16 px-8 text-center bg-primary/5 rounded-3xl border border-primary/10">
+                                                    <div className="p-4 bg-primary/10 rounded-2xl mb-6">
+                                                        <Sparkles className="w-10 h-10 text-primary" />
                                                     </div>
-                                                    <div>
-                                                        <h3 className="text-lg font-semibold mb-1">Ready to practice?</h3>
-                                                        <p className="text-muted-foreground max-w-md mx-auto">
-                                                            Generate a custom interactive activity to test your knowledge against the learning objectives.
-                                                        </p>
-                                                    </div>
+                                                    <h3 className="text-2xl font-bold mb-3">Ready for the Final Assessment?</h3>
+                                                    <p className="text-muted-foreground max-w-lg mb-8 text-lg">
+                                                        Generate a final project that tests these concepts in a customized real-world scenario.
+                                                    </p>
                                                     <Button
-                                                        onClick={() => generateLessonActivity(activeLesson.id)}
-                                                        disabled={isGenerating}
+                                                        onClick={() => triggerAssessmentGeneration(activeLesson.id)}
+                                                        disabled={isGenerating || (activePage?.activity != null && !completedPageActivities[activePage!.id])}
                                                         size="lg"
-                                                        className="mt-4"
+                                                        className="h-14 px-8 text-lg rounded-xl shadow-lg shadow-primary/20"
                                                     >
                                                         {isGenerating ? (
                                                             <>
-                                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                                                Generating Activity...
+                                                                <Loader2 className="w-5 h-5 mr-3 animate-spin" />
+                                                                Generating...
                                                             </>
                                                         ) : (
                                                             <>
-                                                                <Sparkles className="w-4 h-4 mr-2" />
-                                                                Generate Activity
+                                                                <Sparkles className="w-5 h-5 mr-3" />
+                                                                Generate Final Assessment
                                                             </>
                                                         )}
                                                     </Button>
@@ -277,141 +357,137 @@ export function CourseView() {
                                     {/* Activity Result */}
                                     {showActivityResult && activityScore !== null && (
                                         <motion.div
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="mt-8 pt-6 border-t border-border/40"
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            className="mt-12"
                                         >
-                                            <Card className={`p-6 ${activityScore >= passingScore
-                                                ? 'bg-green-500/10 border-green-500/20'
-                                                : 'bg-orange-500/10 border-orange-500/20'
+                                            <div className={`p-8 rounded-3xl border-2 ${activityScore >= passingScore
+                                                ? 'bg-green-500/5 border-green-500/20'
+                                                : 'bg-orange-500/5 border-orange-500/20'
                                                 }`}>
-                                                <h3 className="text-xl font-bold mb-2">
-                                                    {activityScore >= passingScore ? '🎉 Great Job!' : '📚 Keep Learning'}
-                                                </h3>
-                                                <p className="text-lg mb-4">
-                                                    You scored <strong>{activityScore}%</strong>
-                                                    {activityScore >= passingScore
-                                                        ? ' - You passed!'
-                                                        : ` - You need ${passingScore}% to pass.`}
-                                                </p>
-
-                                                {activityFeedback && (
-                                                    <div className="mb-6 p-4 bg-background/50 rounded-lg text-sm whitespace-pre-wrap">
-                                                        {activityFeedback}
+                                                <div className="flex flex-col md:flex-row gap-8">
+                                                    <div className="flex-none flex items-center justify-center w-32 h-32 rounded-2xl bg-background shadow-xl border border-border/40">
+                                                        <div className="text-center">
+                                                            <div className="text-4xl font-bold">{activityScore}%</div>
+                                                            <div className="text-xs uppercase font-bold text-muted-foreground mt-1">Score</div>
+                                                        </div>
                                                     </div>
-                                                )}
 
-                                                {activityScore >= passingScore ? (
-                                                    <>
-                                                        {isGenerating ? (
-                                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                                <span>Generating your next lesson...</span>
+                                                    <div className="flex-1 space-y-4">
+                                                        <h3 className="text-3xl font-bold">
+                                                            {activityScore >= passingScore ? '🎉 Outstanding!' : '📚 Almost there!'}
+                                                        </h3>
+
+                                                        {activityFeedback && (
+                                                            <div className="bg-background/80 p-5 rounded-xl text-foreground/90 text-lg leading-relaxed shadow-sm border border-border/20">
+                                                                {activityFeedback}
                                                             </div>
-                                                        ) : isLastLesson ? (
-                                                            <div>
-                                                                <p className="text-muted-foreground mb-4">
-                                                                    You've completed the entire course!
-                                                                </p>
-                                                                <Button onClick={() => setAppState('COURSES')}>
-                                                                    Back to Courses
+                                                        )}
+
+                                                        <div className="flex gap-4 pt-4">
+                                                            {activityScore >= passingScore ? (
+                                                                <>
+                                                                    {isGenerating ? (
+                                                                        <div className="flex items-center gap-3 px-6 py-3 bg-muted rounded-xl text-muted-foreground animate-pulse">
+                                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                                            <span className="font-semibold">Preparing your next lesson...</span>
+                                                                        </div>
+                                                                    ) : isLastLesson ? (
+                                                                        <Button size="lg" onClick={() => setAppState('COURSES')} className="rounded-xl h-12 px-8">
+                                                                            Complete Course & Return
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <Button size="lg" onClick={handleContinue} className="rounded-xl h-12 px-8 shadow-lg shadow-primary/20">
+                                                                            Continue to Next Lesson
+                                                                        </Button>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <Button size="lg" onClick={handleRetry} className="rounded-xl h-12 px-8">
+                                                                    Re-try with New Exercise
                                                                 </Button>
-                                                            </div>
-                                                        ) : (
-                                                            <Button onClick={handleContinue}>
-                                                                Continue to Next Lesson
-                                                            </Button>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <p className="text-sm text-muted-foreground mb-4">
-                                                            Don't worry! We'll create a new activity that will help you learn this material better.
-                                                        </p>
-                                                        {isGenerating ? (
-                                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                                <span>Creating a new learning activity for you...</span>
-                                                            </div>
-                                                        ) : (
-                                                            <Button onClick={handleRetry}>
-                                                                Try New Activity
-                                                            </Button>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </Card>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </motion.div>
                                     )}
 
                                     {/* Completed Lesson */}
                                     {activeLesson.isCompleted && !showActivityResult && (
-                                        <div className="mt-8 pt-6 border-t border-border/40 text-center space-y-4">
-                                            <p className="text-muted-foreground mb-4">
-                                                ✓ Lesson completed with {activeLesson.comprehensionScore}%
-                                            </p>
+                                        <div className="mt-12 pt-10 border-t border-border/40 flex flex-col items-center">
+                                            <div className="flex items-center gap-2 text-green-500 font-bold text-xl mb-6">
+                                                <CheckCircle className="w-6 h-6" />
+                                                <span>Lesson Completed ({activeLesson.comprehensionScore}%)</span>
+                                            </div>
                                             {!isLastLesson && (
                                                 <Button
                                                     onClick={() => setCurrentLessonIndex(currentLessonIndex + 1)}
                                                     variant="outline"
+                                                    size="lg"
+                                                    className="h-12 px-10 rounded-xl"
                                                 >
-                                                    Go to Next Lesson →
+                                                    Move to Next Lesson
                                                 </Button>
                                             )}
                                         </div>
                                     )}
                                 </motion.div>
-                            </ScrollArea>
-                        </div>
-                    ) : activeLessonRoadmap ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-                            {isGenerating ? (
-                                <>
-                                    <Loader2 className="w-12 h-12 animate-spin text-primary" />
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">Generating: {activeLessonRoadmap.title}</h3>
-                                        <p className="text-muted-foreground">
-                                            Creating a personalized lesson based on your progress...
-                                        </p>
-                                        <p className="text-sm text-muted-foreground/70 mt-2">
-                                            This may take a moment
-                                        </p>
-                                    </div>
-                                </>
+                            ) : activeLessonRoadmap ? (
+                                <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8">
+                                    {isGenerating ? (
+                                        <>
+                                            <div className="relative">
+                                                <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
+                                                <Loader2 className="w-20 h-20 animate-spin text-primary relative z-10" />
+                                            </div>
+                                            <div className="space-y-3">
+                                                <h3 className="text-3xl font-bold tracking-tight">Generating Lesson</h3>
+                                                <p className="text-xl text-muted-foreground max-w-md mx-auto">
+                                                    We're building "{activeLessonRoadmap.title}" specifically for your learning journey.
+                                                </p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="p-6 bg-muted rounded-3xl">
+                                                <BookOpen className="w-16 h-16 text-muted-foreground/40" />
+                                            </div>
+                                            <div className="space-y-4">
+                                                <h3 className="text-3xl font-bold">{activeLessonRoadmap.title}</h3>
+                                                <p className="text-xl text-muted-foreground max-w-lg mx-auto">
+                                                    This lesson is waiting for you. Complete the previous material to unlock your next challenge.
+                                                </p>
+                                                <div className="pt-6">
+                                                    {((currentLessonIndex > 0 && currentCourse.lessons[currentLessonIndex - 1]?.isCompleted) || currentLessonIndex === 0) && (
+                                                        <Button
+                                                            onClick={() => {
+                                                                if (currentLessonIndex === 0) {
+                                                                    generateNextLesson(100);
+                                                                } else {
+                                                                    generateNextLesson(currentCourse.lessons[currentLessonIndex - 1].comprehensionScore || 100);
+                                                                }
+                                                            }}
+                                                            size="lg"
+                                                            className="h-14 px-10 rounded-xl text-lg"
+                                                        >
+                                                            Unlock Lesson Now
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             ) : (
-                                <>
-                                    <Circle className="w-12 h-12 text-muted-foreground" />
-                                    <div>
-                                        <h3 className="text-lg font-semibold mb-2">{activeLessonRoadmap.title}</h3>
-                                        <p className="text-muted-foreground mb-4">
-                                            This lesson hasn't been generated yet. Complete the previous lesson to unlock it.
-                                        </p>
-                                        {/* Allow manual generation if previous lesson is completed but this one isn't generated */}
-                                        {((currentLessonIndex > 0 && currentCourse.lessons[currentLessonIndex - 1]?.isCompleted) || currentLessonIndex === 0) && (
-                                            <Button
-                                                onClick={() => {
-                                                    if (currentLessonIndex === 0) {
-                                                        // For first lesson, we don't have a score, pass 100 as dummy or handle in store
-                                                        generateNextLesson(100);
-                                                    } else {
-                                                        generateNextLesson(currentCourse.lessons[currentLessonIndex - 1].comprehensionScore || 100);
-                                                    }
-                                                }}
-                                                variant="default"
-                                            >
-                                                Generate Lesson
-                                            </Button>
-                                        )}
-                                    </div>
-                                </>
+                                <div className="flex items-center justify-center min-h-[40vh] text-muted-foreground text-xl">
+                                    No lesson content available.
+                                </div>
                             )}
                         </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                            No lesson available.
-                        </div>
-                    )}
-                </Card>
+                    </ScrollArea>
+                </div>
             </div>
         </div>
     );
