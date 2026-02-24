@@ -23,7 +23,7 @@ An intelligent, adaptive learning platform that creates personalized courses bas
 
 ## 🚀 Live Demo
 
-Visit the live application: [https://1111philo.github.io/school/](https://1111philo.github.io/school/)
+Visit the live application: [https://1111philo.github.io/learn/](https://1111philo.github.io/learn/)
 
 ## 🛠️ Technology Stack
 
@@ -46,8 +46,8 @@ Visit the live application: [https://1111philo.github.io/school/](https://1111ph
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/1111philo/school.git
-cd school
+git clone https://github.com/1111philo/learn.git
+cd learn
 ```
 
 ### 2. Install dependencies
@@ -105,7 +105,7 @@ This project is configured for automatic deployment to GitHub Pages:
 
 1. **Automatic Deployment**: Every push to the `main` branch triggers an automatic build and deployment
 2. **GitHub Actions**: The workflow is defined in `.github/workflows/deploy.yml`
-3. **Live URL**: Your app will be available at `https://[username].github.io/school/`
+3. **Live URL**: Your app will be available at `https://[username].github.io/learn/`
 
 ### Manual Deployment Setup
 
@@ -119,7 +119,7 @@ If you fork this repository:
 ## 📁 Project Structure
 
 ```
-school/
+learn/
 ├── src/
 │   ├── components/       # React components
 │   │   ├── Layout.tsx   # Main app layout

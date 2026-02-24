@@ -54,7 +54,7 @@ export const useAppStore = create<AppStore>()(
             },
 
             clearAllData: () => {
-                localStorage.removeItem('1111-school-storage');
+                localStorage.removeItem('1111-learn-storage');
                 set({
                     appState: 'COURSES',
                     savedCourses: [],
@@ -466,7 +466,7 @@ export const useAppStore = create<AppStore>()(
             })
         }),
         {
-            name: '1111-school-storage',
+            name: '1111-learn-storage',
             partialize: (state) => ({
                 settings: state.settings,
                 savedCourses: state.savedCourses
