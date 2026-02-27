@@ -132,6 +132,47 @@ Card grid of all the user's courses:
 
 ---
 
+## Accessibility
+
+Accessibility is a first-class concern, not a retrofit. These requirements apply to every screen
+from the first build.
+
+### Semantics & Screen Readers
+- Semantic HTML throughout: proper heading hierarchy (h1-h3), landmark regions (nav, main, aside),
+  lists for list content
+- All interactive elements have accessible names (labels, aria-labels where needed)
+- Lesson content rendered from Markdown must produce semantic headings, not styled divs
+- Status changes (lesson unlocked, feedback received, generation complete) announced via
+  aria-live regions
+
+### Keyboard Navigation
+- Full keyboard operability: every action reachable without a mouse
+- Visible focus indicators on all interactive elements (inputs, buttons, cards, nav items)
+- Left-nav lesson list navigable with arrow keys
+- Tab order follows logical reading order
+- Modal/overlay interactions trap focus and return it on close
+
+### Visual
+- WCAG 2.1 AA contrast ratios in all color themes
+- No color-only indicators — pair with icons, labels, or patterns (e.g., locked/unlocked lessons
+  use icons + text, not just color)
+- Support reduced motion (respect `prefers-reduced-motion` OS setting, disable animations)
+- Adjustable base font size
+- Comfortable line height and max line length for long-form lesson content
+
+### Forms & Inputs
+- All form fields have visible labels (not placeholder-only)
+- Error messages associated with their fields via aria-describedby
+- Activity submission and course creation forms usable entirely via keyboard
+- Loading/submitting states communicated to assistive technology
+
+### Content
+- Generated lesson content should use clear language and define jargon
+- Feedback (strengths, improvements, tips) structured as lists, not walls of text
+- Assessment results use semantic structure (not just color-coded bars)
+
+---
+
 ## What's Deferred
 
 These are real features but not part of the initial validation:
