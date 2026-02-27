@@ -8,11 +8,12 @@
 | ORM | SQLAlchemy 2.0 async | `mapped_column` style |
 | Migrations | Alembic | Async support |
 | Validation | Pydantic (core) | No pydantic_graph, no Logfire, no pydantic_evals |
+| LLM framework | PydanticAI | Structured output, provider abstraction, tool use when needed |
+| LLM provider | Anthropic (Claude) | Default; swappable via PydanticAI's model parameter |
 | Database | PostgreSQL everywhere | SQLite only for fast unit tests |
 | Frontend | React 19 + TypeScript | Existing SPA, preserved |
 | State mgmt | Zustand | API-backed with localStorage cache |
 | Styling | Shadcn/ui + Tailwind | Existing design system |
-| LLM | Provider-agnostic | Thin wrapper, swap providers without touching business logic |
 
 ---
 
@@ -24,39 +25,40 @@ The original PRDs define 9 "specialized AI agents." They're not agents — they 
 don't have memory across invocations, and don't make autonomous decisions. They're structured LLM
 calls.
 
-Each "agent" becomes a plain async function:
+Each "agent" is a PydanticAI Agent instance — lightweight, stateless, no framework overhead:
 
-```
-async def plan_lesson(input: LessonPlanInput, profile: LearnerProfile | None) -> LessonPlanOutput
+```python
+from pydantic_ai import Agent
+
+lesson_planner = Agent(
+    "anthropic:claude-sonnet-4-6",
+    output_type=LessonPlanOutput,
+    system_prompt="...",
+)
+
+result = await lesson_planner.run(prompt, deps=deps)
 ```
 
 - Takes typed input, returns typed output (Pydantic models)
-- System prompt constructed from input + learner profile
-- Output parsed and validated against Pydantic schema
-- Retry on validation failure (up to 2 attempts)
-- Provider-agnostic: the LLM client is injected, not hardcoded
+- System prompt constructed from input + learner profile (via `@agent.system_prompt` decorator)
+- Output parsed and validated against Pydantic schema by PydanticAI
+- Retry on validation failure (up to 2 attempts, built into PydanticAI)
+- Provider-agnostic: swap `"anthropic:claude-sonnet-4-6"` for `"openai:gpt-4o"` or
+  `"google-gla:gemini-2.0-flash"` — no code changes
+- Tool use available when needed (e.g., future: web search for examples, retrieval)
 
-No graph library. The generation pipeline is sequential — describe, plan, write, create activity —
+No graph library. The generation pipeline is sequential — plan, write, create activity —
 repeated per objective. That's a for-loop.
 
-### Provider-agnostic LLM layer
+### Provider-agnostic via PydanticAI
 
-A thin abstraction over LLM providers:
+PydanticAI handles the LLM abstraction layer:
 
-```
-async def generate_structured(
-    prompt: str,
-    system: str,
-    output_type: type[T],
-    model: str | None = None,
-) -> T
-```
-
-- Handles provider-specific API differences internally
-- Structured output parsing (JSON mode or function calling depending on provider)
-- Token tracking for cost monitoring
-- Model selection via configuration, not code changes
-- Swap GPT-4o for Claude or Gemini by changing a config value
+- Supports Anthropic, OpenAI, Google Gemini, and others via a unified interface
+- Structured output with Pydantic model validation built in
+- Token tracking via `result.usage()` for cost monitoring
+- Model selection via string identifier — change the model, not the code
+- Default to Claude (Anthropic) for development; swap providers by changing config
 
 ### User scoping from day one
 
@@ -232,24 +234,25 @@ Implemented as a dict of `{(from, to): guard_fn}`, not a library.
 
 ---
 
-## LLM Functions
+## LLM Agents
 
-Five functions replacing nine "agents" (course_describer is folded into lesson_planner):
+Six PydanticAI agents replacing nine from the original PRDs (course_describer folded into
+lesson_planner):
 
-| Function | Input | Output | When Called |
+| Agent | Input | Output | When Called |
 |---|---|---|---|
-| `plan_lesson` | objective, course description, profile | lesson plan (structure, key concepts, activity seed) | During generation, per objective |
-| `write_lesson` | lesson plan, profile | Markdown content + key takeaways | During generation, per objective |
-| `create_activity` | activity seed, objective, mastery criteria | full activity spec (instructions, prompt, rubric, hints) | During generation, per objective |
-| `review_activity` | submission text, rubric, objective | score, feedback, mastery decision | On activity submission |
-| `create_assessment` | all objectives, activity scores, profile | assessment items covering all objectives | When all lessons completed |
-| `review_assessment` | submissions, assessment spec, objectives | per-objective scores, pass/fail, feedback | On assessment submission |
+| `lesson_planner` | objective, course description, profile | lesson plan (structure, key concepts, activity seed) | During generation, per objective |
+| `lesson_writer` | lesson plan, profile | Markdown content + key takeaways | During generation, per objective |
+| `activity_creator` | activity seed, objective, mastery criteria | full activity spec (instructions, prompt, rubric, hints) | During generation, per objective |
+| `activity_reviewer` | submission text, rubric, objective | score, feedback, mastery decision | On activity submission |
+| `assessment_creator` | all objectives, activity scores, profile | assessment items covering all objectives | When all lessons completed |
+| `assessment_reviewer` | submissions, assessment spec, objectives | per-objective scores, pass/fail, feedback | On assessment submission |
 
-Each function:
-- Constructs a system prompt (incorporating learner profile when available)
-- Calls `generate_structured()` with the appropriate output Pydantic model
-- Validates output, retries on parse failure (up to 2x)
-- Logs the call to AgentLog
+Each agent:
+- Is a `pydantic_ai.Agent` instance with a typed `output_type` (Pydantic model)
+- Uses `@agent.system_prompt` to dynamically incorporate learner profile
+- Validates output and retries on parse failure (up to 2x, built into PydanticAI)
+- Logs the call to AgentLog (agent name, prompt, output, usage, duration)
 
 ---
 
@@ -264,15 +267,13 @@ backend/
       models.py          # SQLAlchemy entities (7 tables)
       session.py         # Engine, session factory, get_db_session
       migrations/        # Alembic
-    llm/
-      client.py          # Provider-agnostic generate_structured()
-      prompts/           # System prompt templates
-    functions/
-      plan_lesson.py
-      write_lesson.py
-      create_activity.py
-      review_activity.py
-      assessment.py      # create + review
+    agents/
+      lesson_planner.py  # PydanticAI Agent + system prompt
+      lesson_writer.py
+      activity_creator.py
+      activity_reviewer.py
+      assessment.py      # creator + reviewer agents
+      logging.py         # Agent call logging to AgentLog table
     schemas/             # Pydantic I/O models
       lesson.py
       activity.py
