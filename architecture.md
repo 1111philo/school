@@ -306,15 +306,25 @@ event: generation_error
 data: {"objective_index": 2, "error": "LLM call failed after retries"}
 ```
 
-**Reconnection / catchup:** When a client connects to the SSE stream, the server sends catchup
-`lesson_written` events for lessons already in the DB, then streams live events. Catchup is limited
-to `lesson_written` because plan metadata (lesson titles) is not currently persisted (see
-tech-debt.md). If generation is already complete, the server sends catchup + `generation_complete`
-and closes the stream.
+**Client pattern — REST first, SSE second:** The frontend fetches `GET /api/courses/{id}` on page
+load to get the full committed state and renders immediately. SSE is only connected if the course
+is still in `generating` status. This means already-completed courses render instantly with no SSE
+overhead, and mid-generation reconnects show all committed progress before subscribing to live
+updates.
 
-**Keepalive:** The SSE stream sends a comment-based keepalive every 60 seconds to prevent
+**Reconnection / catchup:** When a client connects to the SSE stream, the server sends catchup
+events for all three stages (`lesson_planned`, `lesson_written`, `activity_created`) for lessons
+already in the DB, then streams live events. If generation is already complete, the server sends
+catchup + `generation_complete` and closes the stream.
+
+**Keepalive:** The SSE stream sends a comment-based keepalive every 5 seconds to prevent
 proxy/load balancer timeouts. The keepalive also checks whether the generation task has finished
 (guards against a race where the task completes between subscribe and first event).
+
+**Zombie detection:** If a server restart kills an in-flight generation task, the course gets stuck
+in `generating` with no active background task. The `GET /api/courses/{id}` endpoint auto-heals
+this: if the course status is `generating` but no task is running, it transitions to
+`generation_failed` so the client sees the correct state immediately.
 
 #### Error Handling and Incremental Recovery
 
@@ -322,7 +332,10 @@ Generation is designed for **partial failure and incremental retry**:
 
 - If a single objective fails, the pipeline logs the error, broadcasts `generation_error`, and
   continues with remaining objectives.
-- Successfully generated lessons are committed to the DB immediately — they survive failures.
+- The generation task **commits after each objective** (not at the end). This is critical —
+  without per-objective commits, other sessions (REST fetches, SSE catchup queries) cannot see
+  intermediate progress. Broadcasts must also happen **after** the commit so that any subscriber
+  re-querying the DB sees the committed data.
 - If the course ends with some lessons generated and some failed, it transitions to
   `generation_failed` (if zero lessons) or `in_progress` (if at least one lesson).
 - **On retry** (`generation_failed → generating`), the pipeline checks which objectives already

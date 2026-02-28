@@ -108,11 +108,17 @@ async def generation_stream(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
+    # Capture user ID as a plain value so we never trigger lazy loads on the
+    # ORM object later (e.g. after db.expire_all() inside _get_current_lesson_count).
+    user_id = user.id
+
     # Verify the course exists and belongs to this user
     result = await db.execute(
         select(CourseInstance)
-        .where(CourseInstance.id == course_id, CourseInstance.user_id == user.id)
-        .options(selectinload(CourseInstance.lessons))
+        .where(CourseInstance.id == course_id, CourseInstance.user_id == user_id)
+        .options(
+            selectinload(CourseInstance.lessons).selectinload(Lesson.activities)
+        )
     )
     course = result.scalar_one_or_none()
     if not course:
@@ -120,14 +126,43 @@ async def generation_stream(
 
     generation_in_flight = is_running(course_id)
 
-    # Build catchup events from lessons already in DB
+    # Build catchup events from lessons already in DB.
+    # Send all three stages (planned, written, activity_created) so that a
+    # client that reconnects mid-generation sees the full progress.
     existing_lessons = sorted(course.lessons, key=lambda l: l.objective_index)
-    catchup_events = []
+    catchup_events: list[dict] = []
     for lesson in existing_lessons:
+        idx = lesson.objective_index
         catchup_events.append({
-            "event": "lesson_written",
-            "data": {"objective_index": lesson.objective_index},
+            "event": "lesson_planned",
+            "data": {"objective_index": idx, "lesson_title": None, "skipped": True},
         })
+        if lesson.lesson_content is not None:
+            catchup_events.append({
+                "event": "lesson_written",
+                "data": {"objective_index": idx, "skipped": True},
+            })
+        if lesson.activities:
+            catchup_events.append({
+                "event": "activity_created",
+                "data": {
+                    "objective_index": idx,
+                    "activity_id": lesson.activities[0].id,
+                    "skipped": True,
+                },
+            })
+
+    async def _get_current_lesson_count() -> int:
+        """Re-query the DB so we never report a stale lesson count.
+
+        Expire all cached ORM state first so the subsequent SELECT sees rows
+        committed by the background generation task (which uses its own session).
+        """
+        db.expire_all()
+        result_inner = await db.execute(
+            select(Lesson).where(Lesson.course_instance_id == course_id)
+        )
+        return len(result_inner.scalars().all())
 
     async def event_generator() -> AsyncGenerator[dict, None]:
         # Send catchup events first
@@ -135,7 +170,8 @@ async def generation_stream(
             yield {"event": evt["event"], "data": json.dumps(evt["data"])}
 
         if not generation_in_flight and course.status != "generating":
-            # Generation is done -- send completion and close
+            # Generation is done -- use already-loaded lessons (guaranteed fresh
+            # since we just queried them at the top of this endpoint)
             yield {
                 "event": "generation_complete",
                 "data": json.dumps({
@@ -145,20 +181,23 @@ async def generation_stream(
             }
             return
 
-        # Subscribe to live events
+        # Subscribe to live events.
+        # Use a short poll interval so we detect completion quickly even if
+        # the generation_complete broadcast was missed (e.g. race on connect).
         queue = subscribe(course_id)
         try:
             while True:
                 try:
-                    message = await asyncio.wait_for(queue.get(), timeout=60.0)
+                    message = await asyncio.wait_for(queue.get(), timeout=5.0)
                 except asyncio.TimeoutError:
                     # Check if generation finished while we were waiting
                     if not is_running(course_id):
+                        lesson_count = await _get_current_lesson_count()
                         yield {
                             "event": "generation_complete",
                             "data": json.dumps({
                                 "course_id": course_id,
-                                "lesson_count": len(existing_lessons),
+                                "lesson_count": lesson_count,
                             }),
                         }
                         return
@@ -226,6 +265,12 @@ async def get_course(
     course = result.scalar_one_or_none()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
+
+    # Auto-heal zombie courses: stuck in "generating" with no active background task
+    if course.status == "generating" and not is_running(course_id):
+        course.status = "generation_failed"
+        await db.flush()
+        await db.commit()
 
     from app.schemas.course import ActivityResponse, AssessmentSummary, CourseResponse, LessonResponse
 

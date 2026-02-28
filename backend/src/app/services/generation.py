@@ -123,7 +123,7 @@ async def generate_course_background(
                     )
                     await broadcast(course_id, "lesson_planned", {
                         "objective_index": i,
-                        "lesson_title": "(recovered)",
+                        "lesson_title": None,
                         "skipped": True,
                     })
                     await broadcast(course_id, "lesson_written", {
@@ -169,6 +169,8 @@ async def generate_course_background(
                             )
                             db.add(lesson)
                         await db.flush()
+                        # Commit so the lesson row is visible to other sessions
+                        await db.commit()
 
                     await broadcast(course_id, "lesson_written", {
                         "objective_index": i,
@@ -185,6 +187,8 @@ async def generate_course_background(
                         )
                         db.add(activity)
                         await db.flush()
+                        # Commit so the activity row is visible to other sessions
+                        await db.commit()
                     else:
                         activity = existing.activities[0]
 
@@ -216,10 +220,12 @@ async def generate_course_background(
             else:
                 await transition_course(db, course, "generation_failed")
 
-            await broadcast(course_id, "generation_complete", {
-                "course_id": course_id,
-                "lesson_count": lessons_created,
-            })
+        # Broadcast AFTER the session commits (async-with exit) so that
+        # any SSE subscriber re-querying the DB sees committed data.
+        await broadcast(course_id, "generation_complete", {
+            "course_id": course_id,
+            "lesson_count": lessons_created,
+        })
 
     except Exception:
         logger.exception("Fatal error in background generation for course %s", course_id)

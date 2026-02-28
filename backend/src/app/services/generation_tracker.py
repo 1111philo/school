@@ -1,7 +1,6 @@
 """Track in-flight course generation tasks and broadcast SSE events to subscribers."""
 
 import asyncio
-import json
 import logging
 from typing import Any
 

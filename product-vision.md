@@ -58,15 +58,28 @@ A simple two-step form (not a chat interface):
 
 Both paths (catalog start and custom creation) feed into the same generation pipeline.
 
-### Generation Progress
+### Generation Progress (`/courses/{id}/generate`)
 
-Shown inline on the course page while generation runs:
+The generation page must feel **immediately responsive**. When a user lands on it — whether
+mid-generation, after completion, or on a page refresh — the current state renders instantly from
+a REST fetch. There is no blank loading screen waiting for a stream event.
 
-- Vertical stepper: Describing → Planning → Writing (per lesson)
-- Animated indicator on the active step
-- Lesson counter updates in real-time ("2 of 4 lessons ready")
-- Error state: message + "Retry" button
-- Powered by SSE — not a polling spinner
+**Core principle: the database is the source of truth, not the event stream.** The backend commits
+progress after each objective, so a REST fetch always returns the latest completed state. SSE
+provides live updates on top of that, but never replaces it.
+
+- Vertical stepper: one row per objective, each with sub-steps (planning, writing, creating activity)
+- On page load: REST fetch populates completed objectives with checkmarks immediately
+- If still generating: SSE connects for live progressive updates
+- The next incomplete objective after the last completed one shows an active spinner (inferred —
+  generation is sequential, so this is always knowable even without an explicit SSE event)
+- Completed courses show "Course Ready" with a "Start Learning" button — no SSE connection at all
+- Interrupted/failed generation: clear message + "Retry Generation" button
+- Error per objective: displayed inline without blocking other objectives
+
+The UX goal: a user who refreshes the page mid-generation should see all prior progress instantly
+and watch the current objective progress in real time. A user arriving after generation should
+never wait for anything.
 
 ### Lesson View
 
