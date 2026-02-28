@@ -19,7 +19,12 @@ activity_creator = Agent(
         "Each should be checkable (e.g., 'Includes at least 3 examples with explanations')\n"
         "- hints: 2-5 scaffolding hints that guide without giving the answer\n\n"
         "The activity should directly test the learning objective. Make it challenging but "
-        "achievable. Tailor to the learner's profile if provided."
+        "achievable. Tailor to the learner's profile if provided.\n\n"
+        "IMPORTANT — Domain transfer: The activity seed shows the TOPIC and SKILL to test, "
+        "but you MUST set the activity in a DIFFERENT real-world domain/scenario than the one "
+        "in the seed. For example, if the seed uses a 'user profile' scenario, use something "
+        "unrelated like a 'weather tracker' or 'recipe book'. This forces learners to transfer "
+        "knowledge rather than copy the worked example from the lesson."
     ),
 )
 

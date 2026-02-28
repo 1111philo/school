@@ -21,7 +21,12 @@ lesson_planner = Agent(
         "including the activity type, a prompt, and 2-5 expected evidence items\n"
         "- mastery_criteria: 2-6 rubric-style checks for determining mastery\n\n"
         "The plan must be specific enough that downstream agents can produce aligned content "
-        "without guessing. Tailor the plan to the learner's profile if provided."
+        "without guessing. Tailor the plan to the learner's profile if provided.\n\n"
+        "IMPORTANT — Scope control: You will receive the full list of course objectives. "
+        "Your lesson must cover ONLY the assigned objective. You may briefly mention related "
+        "topics to give context (e.g., a single sentence noting they exist), but do NOT "
+        "teach, define, or provide tables/examples for concepts that belong to a different "
+        "objective. Those will be covered in their own lessons."
     ),
 )
 
@@ -30,12 +35,22 @@ async def run_lesson_planner(
     ctx: AgentContext,
     objective: str,
     course_description: str,
+    all_objectives: list[str] | None = None,
     learner_profile: dict | None = None,
 ) -> LessonPlanOutput:
     prompt = (
         f"Course description: {course_description}\n\n"
-        f"Learning objective: {objective}\n"
+        f"Learning objective for THIS lesson: {objective}\n"
     )
+    if all_objectives:
+        other = [o for o in all_objectives if o != objective]
+        if other:
+            prompt += (
+                "\nOther objectives in this course (DO NOT teach these, "
+                "they have their own lessons):\n"
+                + "\n".join(f"- {o}" for o in other)
+                + "\n"
+            )
     if learner_profile:
         prompt += f"\nLearner profile: {learner_profile}\n"
 

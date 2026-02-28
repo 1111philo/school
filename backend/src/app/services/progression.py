@@ -18,6 +18,8 @@ TRANSITIONS: dict[tuple[str, str], str] = {
     ("awaiting_assessment", "assessment_ready"): "assessment_generated",
     ("assessment_ready", "completed"): "assessment_passed",
     ("assessment_ready", "assessment_ready"): "always",  # retry on fail
+    ("generating", "generation_failed"): "always",
+    ("generation_failed", "generating"): "always",
 }
 
 

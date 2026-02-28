@@ -78,6 +78,9 @@ async def generate_assessment(
     db.add(assessment)
     await db.flush()
 
+    # Refresh assessments relationship so the guard sees the new assessment
+    await db.refresh(course, ["assessments"])
+
     # Transition to assessment_ready
     try:
         await transition_course(db, course, "assessment_ready")

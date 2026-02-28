@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings
 
 
@@ -11,3 +13,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Expose API key to environment so PydanticAI's provider picks it up
+if settings.anthropic_api_key:
+    os.environ.setdefault("ANTHROPIC_API_KEY", settings.anthropic_api_key)
