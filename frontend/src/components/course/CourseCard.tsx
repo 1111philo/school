@@ -33,6 +33,7 @@ export function CourseCard({ course, onDelete }: CourseCardProps) {
       case 'completed':
         return { label: 'Review', path: `/courses/${course.id}` };
       case 'awaiting_assessment':
+      case 'generating_assessment':
       case 'assessment_ready':
         return { label: 'Take Assessment', path: `/courses/${course.id}/assessment` };
       default:

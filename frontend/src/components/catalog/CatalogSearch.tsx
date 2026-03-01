@@ -9,7 +9,7 @@ interface CatalogSearchProps {
 
 export function CatalogSearch({ allTags }: CatalogSearchProps) {
   const { search, tag, setSearch, setTag, load } = useCatalogStore();
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     clearTimeout(timer.current);

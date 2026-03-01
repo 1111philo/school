@@ -15,14 +15,16 @@ set us up for tool use (tools receive `deps` as context).
 **Why deferred:** The current approach works and is simpler. We'll need `deps` when we add tool
 use, so this is a natural refactor at that point.
 
-### Make assessment generation async
-The architecture doc says all long-running LLM workflows should use the async background task
-pattern (return immediately, stream progress). Assessment generation currently blocks the HTTP
-request for a single agent call (~5-10s).
+### Make assessment submission async
+Assessment submission (`POST /submit`) blocks on `run_assessment_reviewer()` for ~5-10s while
+the LLM scores the responses. Unlike generation (where the user navigates to a progress page),
+submission is a form action where the user is actively waiting for their grade — so a blocking
+spinner on the button is arguably fine UX. But it's inconsistent with the async pattern used
+everywhere else, and the latency will grow if we add verification steps or multi-call pipelines.
 
-**Why deferred:** It's one LLM call today, so the latency is tolerable. But the pattern should
-be consistent, and assessment generation may grow (verification steps, multi-call pipelines).
-Apply the same async pattern as course generation.
+**Why deferred:** The "submit and wait" UX is natural for grading. Making it async would require
+SSE or polling for a result the user is already staring at. Revisit if submission latency grows
+or if we add post-scoring steps (e.g. updating learner profile, generating remediation suggestions).
 
 ### Store full lesson plan metadata on Lesson record
 The lesson planner returns a `LessonPlanOutput` with `lesson_title`, `key_concepts`,

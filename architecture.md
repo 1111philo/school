@@ -207,7 +207,7 @@ User
 ## Course State Machine
 
 ```
-draft → generating → active → in_progress → awaiting_assessment → assessment_ready → completed
+draft → generating → active → in_progress → awaiting_assessment → generating_assessment → assessment_ready → completed
                  ↘ generation_failed (retry → generating)
 ```
 
@@ -219,9 +219,11 @@ draft → generating → active → in_progress → awaiting_assessment → asse
 | generation_failed → generating | retry (user-initiated) |
 | active → in_progress | always (auto after generation) |
 | in_progress → awaiting_assessment | all lessons completed |
-| awaiting_assessment → assessment_ready | assessment generated |
+| awaiting_assessment → generating_assessment | always |
+| generating_assessment → assessment_ready | assessment generated |
+| generating_assessment → awaiting_assessment | failure/zombie rollback |
+| assessment_ready → generating_assessment | retry (user-initiated) |
 | assessment_ready → completed | assessment passed |
-| assessment_ready → assessment_ready | assessment failed (retry) |
 
 Implemented as a dict of `{(from_state, to_state): guard_name}` with a dispatcher function that
 evaluates the named guard condition. Not a library.
@@ -430,3 +432,110 @@ frontend/
   src/
     # Existing React 19 SPA structure preserved
 ```
+
+---
+
+## Containerization & Deployment
+
+### The core problem
+
+The dev setup requires Python, uv, Node, npm, and PostgreSQL. That's reasonable for developers,
+but too much friction for teammates who just want to review the product. And deploying to the
+cloud requires packaging all of this into something runnable. Docker solves both.
+
+### One image, two serving modes
+
+The key design decision: **a single Docker image that contains the built frontend and the
+backend**. FastAPI serves both the API and the pre-built static files. There is no nginx, no
+separate frontend container, no reverse proxy in front.
+
+This works because the frontend is a static SPA. Once built (`npm run build` → `dist/`), it's
+just HTML/JS/CSS files that need to be served. FastAPI can mount a `StaticFiles` directory
+alongside its API routes:
+
+- `/api/*` → handled by FastAPI routers (takes priority)
+- `/*` → falls through to the static file mount, which serves `index.html` for all paths
+  (client-side routing)
+
+This is functionally identical to what nginx or Vite's preview server would do. The difference is
+there's no additional process to configure, no port mapping between containers, and no proxy
+rules to maintain.
+
+### Why not separate containers?
+
+A common pattern is backend + frontend + nginx in three containers. This adds complexity that
+isn't justified here:
+
+- **nginx as reverse proxy** — Solves a problem we don't have. FastAPI handles static files
+  natively. Adding nginx means another config file, another container, another thing that can
+  drift from dev behavior.
+- **Separate frontend container** — The frontend is static files. A container that exists only to
+  serve static files is an entire runtime for `serve -s dist/`. Embedding the files in the
+  backend container eliminates the coordination.
+- **Config drift** — Every additional layer between the client and the API is a place where
+  behavior can differ between dev and prod. One process serving everything means the routing
+  logic is the same code in both environments.
+
+### Dev vs prod: same code, different serving
+
+The only difference between dev and production is **who serves the frontend**:
+
+| | Dev | Production |
+|---|---|---|
+| Frontend served by | Vite (HMR, hot reload) | FastAPI (static mount) |
+| API served by | FastAPI (--reload) | FastAPI (uvicorn) |
+| Frontend ↔ API | Vite proxy (`/api` → `:8000`) | Same process, no proxy needed |
+| How to run | `npm run dev` | `docker compose up` |
+
+The backend code is identical. There's no "production mode" flag, no conditional middleware, no
+environment-specific routing. The static mount is additive: if `static/` exists, mount it. If
+not (dev), don't. Vite's proxy and FastAPI's static mount produce the same result from the
+browser's perspective.
+
+This means:
+- Developers use `npm run dev` with hot reload. Nothing changes.
+- Reviewers use `docker compose up`. No Python, no Node, no uv — just Docker and an API key.
+- Deployment is pushing the Docker image. Same artifact reviewers tested locally.
+
+### The Dockerfile
+
+Multi-stage build:
+
+1. **Build stage** (Node) — installs frontend deps, runs `npm run build`, produces `dist/`
+2. **Runtime stage** (Python) — installs backend deps with uv, copies built frontend assets into
+   a `static/` directory, copies backend code. Entrypoint runs Alembic migrations then starts
+   uvicorn.
+
+The build stage is discarded — the final image has no Node, no npm, no `node_modules`. Just
+Python, the backend code, and pre-built static files.
+
+### Compose: database + app in one command
+
+Docker Compose defines two services: PostgreSQL and the application. A reviewer or deployer runs
+a single command with their API key, and both the database and the full application (API +
+frontend) come up together. No local toolchain required — just Docker.
+
+The application service depends on the database service, and its entrypoint runs migrations
+before starting the server, so there's no manual setup step.
+
+### What this enables
+
+- **Sharing** — "Install Docker, run one command, open the browser." No environment setup beyond
+  Docker itself and an API key.
+- **Cloud deployment** — Push the image to a registry. Pull it on any VM, container service, or
+  serverless platform. Set two env vars (`DATABASE_URL`, `ANTHROPIC_API_KEY`).
+- **CI/CD** — Build the image in CI, run tests against it, push to registry on merge.
+- **Consistency** — The image a coworker demos locally is the same artifact that runs in
+  the cloud.
+
+### What this doesn't solve
+
+- **Managed database** — Compose runs PostgreSQL in a container, which is fine for demos but
+  ephemeral. Production deployments should use a managed Postgres (RDS, Cloud SQL, etc.) and
+  pass the connection string via `DATABASE_URL`.
+- **HTTPS / domain** — The container serves HTTP. For production, put it behind a load balancer
+  or cloud provider's HTTPS termination.
+- **Horizontal scaling** — The in-process generation tracker (background tasks, SSE pub/sub) is
+  single-instance. Multiple replicas would need Redis-backed pub/sub. See "Scaling Beyond the
+  POC" above.
+- **Auth** — Still stubbed. Containerization doesn't change this.

@@ -1,0 +1,12 @@
+**/.git
+**/__pycache__
+**/.venv
+**/node_modules
+**/.env*
+frontend/dist
+backend/static
+*.pyc
+*.md
+.claude
+docker-compose.yml
+Dockerfile

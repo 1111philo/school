@@ -25,50 +25,37 @@ The full learning loop works end-to-end:
 ### What's Still TODO
 
 - **Learner profiles & customization** — The profile form exists but doesn't meaningfully shape generated content yet
-- **Productionization** — Auth is stubbed (single dev user), no deployment config, no rate limiting
+- **Asset generation** — No images, diagrams, or visual aids in lessons (text-only)
+- **Model support** — Currently hardcoded to Claude (Sonnet). No model selection or provider switching.
+- **Productionization** — Auth is stubbed (single dev user), no rate limiting, no cloud deployment yet.
 
 ## Prerequisites
 
-- **Docker** — for PostgreSQL
-- **Python 3.12+** and **[uv](https://docs.astral.sh/uv/)** — backend package manager
-- **Node.js 18+** and **npm** — frontend
-- **Anthropic API key** — get one at [console.anthropic.com](https://console.anthropic.com/)
+You'll need an **[Anthropic API key](https://console.anthropic.com/)** with a few dollars of credits loaded. Generating one course costs ~$0.60 (~15 LLM calls).
 
-## Setup
+**For Docker (quickest way to try it):** just [Docker](https://www.docker.com/get-started/).
 
-```bash
-# 1. Clone and enter the repo
-cd learn
-
-# 2. Start PostgreSQL
-docker compose up -d
-
-# 3. Backend setup
-cd backend
-cp .env.example .env
-# Edit .env and add your ANTHROPIC_API_KEY
-uv sync
-PYTHONPATH=src uv run alembic upgrade head
-cd ..
-
-# 4. Frontend setup
-cd frontend
-npm install
-cd ..
-
-# 5. Install root dev dependencies (concurrently)
-npm install
-```
+**For development:** Docker + [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`) + [Node.js 18+](https://nodejs.org/).
 
 ## Running
 
-From the repo root:
+### Docker (quickest)
 
 ```bash
+./scripts/configure.sh   # one-time: prompts for your Anthropic API key
+docker compose up --build
+```
+
+Open **http://localhost:8000**. The container reads your API key from `backend/.env`, builds the frontend into the image, runs migrations on start, and serves everything from one port.
+
+### Development
+
+```bash
+./scripts/setup.sh   # one-time: installs deps, runs migrations, prompts for API key
 npm run dev
 ```
 
-This starts both the backend (FastAPI on `:8000`) and frontend (Vite on `:5173`) concurrently.
+This starts both the backend (FastAPI on `:8000`) and frontend (Vite on `:5173`) concurrently with hot reloading.
 
 Open **http://localhost:5173** to start.
 

@@ -15,9 +15,12 @@ TRANSITIONS: dict[tuple[str, str], str] = {
     ("generating", "active"): "all_content_generated",
     ("active", "in_progress"): "always",
     ("in_progress", "awaiting_assessment"): "all_lessons_completed",
+    ("awaiting_assessment", "generating_assessment"): "always",
+    ("generating_assessment", "assessment_ready"): "assessment_generated",
+    ("generating_assessment", "awaiting_assessment"): "always",  # failure/zombie rollback
     ("awaiting_assessment", "assessment_ready"): "assessment_generated",
+    ("assessment_ready", "generating_assessment"): "always",  # retry
     ("assessment_ready", "completed"): "assessment_passed",
-    ("assessment_ready", "assessment_ready"): "always",  # retry on fail
     ("generating", "generation_failed"): "always",
     ("generation_failed", "generating"): "always",
 }

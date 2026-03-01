@@ -1,11 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useCourseStore } from '@/stores/course-store';
-import { generateAssessment, submitAssessment } from '@/api/assessments';
+import {
+  generateAssessment,
+  getAssessment,
+  submitAssessment,
+} from '@/api/assessments';
 import { AssessmentForm } from '@/components/assessment/AssessmentForm';
 import { AssessmentResults } from '@/components/assessment/AssessmentResults';
 import type { AssessmentResponse } from '@/api/types';
+import { ApiError } from '@/api/client';
 
 export function AssessmentPage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -15,35 +20,100 @@ export function AssessmentPage() {
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
+  // Load course on mount
   useEffect(() => {
     if (courseId) loadCourse(courseId);
   }, [courseId, loadCourse]);
 
-  // Check for existing assessment
+  // Check for existing assessment from REST-fetched course data
   useEffect(() => {
-    if (!course) return;
+    if (!course || !courseId) return;
+
     const existing = course.assessments.find(
       (a) => a.status === 'pending' || a.status === 'reviewed',
     );
+
     if (existing) {
-      // Fetch full assessment data by generating again (returns existing if pending)
-      handleGenerate();
+      // Assessment exists — fetch full data via REST
+      getAssessment(courseId).then(setAssessment).catch(() => {
+        // If fetch fails, let user trigger generation
+      });
+    } else if (
+      course.status === 'generating_assessment' ||
+      course.status === 'awaiting_assessment'
+    ) {
+      // Course is mid-generation or ready — connect SSE or let user trigger
+      if (course.status === 'generating_assessment') {
+        setGenerating(true);
+        connectSSE(courseId);
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course?.id]);
+
+  // Cleanup SSE on unmount
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close();
+    };
+  }, []);
+
+  function connectSSE(id: string) {
+    eventSourceRef.current?.close();
+
+    const evtSource = new EventSource(
+      `/api/assessments/${id}/assessment-stream`,
+    );
+    eventSourceRef.current = evtSource;
+
+    evtSource.addEventListener('assessment_complete', async () => {
+      evtSource.close();
+      eventSourceRef.current = null;
+      try {
+        const result = await getAssessment(id);
+        setAssessment(result);
+      } catch {
+        setError('Assessment was generated but could not be loaded.');
+      }
+      setGenerating(false);
+    });
+
+    evtSource.addEventListener('assessment_error', (e) => {
+      evtSource.close();
+      eventSourceRef.current = null;
+      const data = JSON.parse(e.data);
+      setError(data.error || 'Assessment generation failed');
+      setGenerating(false);
+    });
+
+    evtSource.onerror = () => {
+      // Only treat as terminal if the connection is fully closed
+      // (allows browser auto-reconnect for transient network blips)
+      if (evtSource.readyState === EventSource.CLOSED) {
+        eventSourceRef.current = null;
+        setError('Lost connection during assessment generation');
+        setGenerating(false);
+      }
+    };
+  }
 
   async function handleGenerate() {
     if (!courseId) return;
     setGenerating(true);
     setError(null);
     try {
-      const result = await generateAssessment(courseId);
-      setAssessment(result);
+      await generateAssessment(courseId);
+      connectSSE(courseId);
     } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setGenerating(false);
+      if (e instanceof ApiError && e.status === 409) {
+        // Already in progress — just connect SSE
+        connectSSE(courseId);
+      } else {
+        setError((e as Error).message);
+        setGenerating(false);
+      }
     }
   }
 
@@ -107,7 +177,7 @@ export function AssessmentPage() {
     );
   }
 
-  // Generate state
+  // Generating state
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-bold">Assessment</h1>
@@ -116,10 +186,23 @@ export function AssessmentPage() {
           ? 'Generating your assessment...'
           : 'Ready to test your knowledge?'}
       </p>
+      {generating && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span className="animate-spin">&#9696;</span>
+          <span>This may take a few seconds</span>
+        </div>
+      )}
       {!generating && !assessment && (
         <Button onClick={handleGenerate}>Generate Assessment</Button>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <div className="space-y-2">
+          <p className="text-sm text-destructive">{error}</p>
+          <Button variant="outline" onClick={handleGenerate}>
+            Retry
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

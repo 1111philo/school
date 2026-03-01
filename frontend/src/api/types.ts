@@ -40,6 +40,7 @@ export type CourseStatus =
   | 'active'
   | 'in_progress'
   | 'awaiting_assessment'
+  | 'generating_assessment'
   | 'assessment_ready'
   | 'completed'
   | 'generation_failed';
